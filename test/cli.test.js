@@ -109,20 +109,48 @@ test("auth status does not guess a credential type for an invalid ADC path", asy
   assert.equal("type" in status.auth, false);
 });
 
-test("malformed ADC credential JSON is an actionable typed error", async (t) => {
+test("malformed and unsupported ADC credential JSON are typed validation errors", async (t) => {
   const { XDG_CONFIG_HOME } = isolateAuthEnv(t);
-  const credentialsPath = join(XDG_CONFIG_HOME, "malformed.json");
-  writeFileSync(credentialsPath, "{");
-  setEnv(t, "GOOGLE_APPLICATION_CREDENTIALS", credentialsPath);
-  await assert.rejects(setupCommand([]), (error) =>
-    error.code === "AUTH_CONFIG_ERROR" && error.message.includes("contains invalid JSON"),
+  for (const [name, content] of [
+    ["malformed.json", "{"],
+    ["unsupported.json", "{}"],
+  ]) {
+    const credentialsPath = join(XDG_CONFIG_HOME, name);
+    writeFileSync(credentialsPath, content);
+    setEnv(t, "GOOGLE_APPLICATION_CREDENTIALS", credentialsPath);
+    const env = { ...process.env, XDG_CONFIG_HOME, GOOGLE_APPLICATION_CREDENTIALS: credentialsPath };
+    const setup = spawnSync(process.execPath, [cli.pathname, "setup"], { encoding: "utf8", env });
+    assert.equal(setup.status, 2, setup.stdout);
+    assert.match(setup.stdout, /VALIDATION_ERROR/);
+    const status = spawnSync(process.execPath, [cli.pathname, "setup", "status"], { encoding: "utf8", env });
+    assert.equal(status.status, 0, status.stdout);
+    assert.equal(decode(status.stdout).auth.status, "invalid");
+  }
+});
+
+test("quota-project setup verifies and persists the requested local value", async (t) => {
+  const { XDG_CONFIG_HOME } = isolateAuthEnv(t);
+  const output = decode(
+    await setupCommand(["--quota-project", "fixture-project"], {
+      authFactory: () => ({
+        getApplicationDefault: async () => {
+          throw new Error("Could not load the default credentials");
+        },
+      }),
+    }),
   );
-  assert.equal(decode(await setupCommand(["status"])).auth.status, "invalid");
+  assert.equal(output.setup.status, "incomplete");
+  assert.deepEqual(JSON.parse(readFileSync(join(XDG_CONFIG_HOME, "search-console-axi", "config.json"), "utf8")), {
+    quotaProjectId: "fixture-project",
+  });
 });
 
 test("service-account setup treats malformed and invalid key contents as validation errors", (t) => {
   const { XDG_CONFIG_HOME } = isolateAuthEnv(t);
-  for (const [name, content] of [["malformed.json", "{"], ["invalid.json", "{}"]]) {
+  for (const [name, content] of [
+    ["malformed.json", "{"],
+    ["invalid.json", "{}"],
+  ]) {
     const keyPath = join(XDG_CONFIG_HOME, name);
     writeFileSync(keyPath, content);
     const result = spawnSync(process.execPath, [cli.pathname, "setup", "service-account", keyPath], {

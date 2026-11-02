@@ -31,7 +31,10 @@ const configError = (error: unknown, action: string): AxiError => {
 };
 
 type Config = { serviceAccountPath?: string; quotaProjectId?: string };
-type AuthConfigErrorKind = "missing-credentials" | "invalid-service-account" | "invalid-credentials-path";
+type JsonFailure = "read" | "parse" | "shape";
+type JsonFailureHandler = (failure: JsonFailure, error: unknown) => Error;
+type AuthConfigErrorKind =
+  "missing-credentials" | "invalid-service-account" | "invalid-credential-file" | "invalid-credentials-path";
 class AuthConfigError extends Error {
   constructor(
     readonly kind: AuthConfigErrorKind,
@@ -59,38 +62,56 @@ export type AuthProvider = {
   projectId?: string;
 };
 
-function readConfig(): Config {
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function readJsonFile<T>(
+  path: string,
+  isValid: (value: unknown) => value is T,
+  onFailure: JsonFailureHandler,
+  optional = false,
+): T | undefined {
   let text: string;
   try {
-    text = readFileSync(configFile(), "utf8");
+    text = readFileSync(path, "utf8");
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return {};
-    throw configError(error, "read");
+    if (optional && error && typeof error === "object" && "code" in error && error.code === "ENOENT") return undefined;
+    throw onFailure("read", error);
   }
-  let data: unknown;
+  let value: unknown;
   try {
-    data = JSON.parse(text);
-  } catch {
-    throw new AxiError(`Config file ${configFile()} contains invalid JSON`, "VALIDATION_ERROR", [
-      "Repair or remove the invalid config file",
-    ]);
+    value = JSON.parse(text);
+  } catch (error) {
+    throw onFailure("parse", error);
   }
-  if (!data || typeof data !== "object" || Array.isArray(data))
-    throw new AxiError(`Config file ${configFile()} has an invalid format`, "VALIDATION_ERROR", [
-      "Repair or remove the invalid config file",
-    ]);
-  if (
-    ("serviceAccountPath" in data && typeof data.serviceAccountPath !== "string") ||
-    ("quotaProjectId" in data && typeof data.quotaProjectId !== "string")
-  )
-    throw new AxiError(`Config file ${configFile()} has an invalid format`, "VALIDATION_ERROR", [
-      "Repair or remove the invalid config file",
-    ]);
-  const config: Config = {};
-  if ("serviceAccountPath" in data && typeof data.serviceAccountPath === "string")
-    config.serviceAccountPath = data.serviceAccountPath;
-  if ("quotaProjectId" in data && typeof data.quotaProjectId === "string") config.quotaProjectId = data.quotaProjectId;
-  return config;
+  if (!isValid(value)) throw onFailure("shape", new Error("JSON does not match the expected format"));
+  return value;
+}
+
+function isConfig(value: unknown): value is Config {
+  return (
+    isObject(value) &&
+    (!("serviceAccountPath" in value) || typeof value.serviceAccountPath === "string") &&
+    (!("quotaProjectId" in value) || typeof value.quotaProjectId === "string")
+  );
+}
+
+function readConfig(): Config {
+  const config = readJsonFile(
+    configFile(),
+    isConfig,
+    (failure, error) => {
+      if (failure === "read") return configError(error, "read");
+      return new AxiError(
+        `Config file ${configFile()} contains invalid ${failure === "parse" ? "JSON" : "format"}`,
+        "VALIDATION_ERROR",
+        ["Repair or remove the invalid config file"],
+      );
+    },
+    true,
+  );
+  return config ?? {};
 }
 
 function saveConfig(config: Config): void {
@@ -136,24 +157,28 @@ function parseServiceAccount(data: unknown): ServiceAccount | undefined {
   };
 }
 
+function isServiceAccountFile(value: unknown): value is Record<string, unknown> {
+  return parseServiceAccount(value) !== undefined;
+}
+
+function isCredentialFile(value: unknown): value is Record<string, unknown> {
+  return isObject(value) && typeof value["type"] === "string" && value["type"].length > 0;
+}
+
 function readServiceAccount(path: string, source: string): ServiceAccount {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(path, "utf8"));
-  } catch (error) {
-    if (error instanceof SyntaxError)
-      throw new AuthConfigError("invalid-service-account", `${source} at ${path} contains invalid JSON`);
-    throw new AuthConfigError(
-      "invalid-credentials-path",
-      `${source} at ${path} is unreadable; check that the file exists and is readable`,
-    );
-  }
-  const key = parseServiceAccount(parsed);
-  if (!key)
-    throw new AuthConfigError(
-      "invalid-service-account",
-      `${source} does not contain a valid Google service-account key`,
-    );
+  const data = readJsonFile(path, isServiceAccountFile, (failure) =>
+    failure === "read"
+      ? new AuthConfigError(
+          "invalid-credentials-path",
+          `${source} at ${path} is unreadable; check that the file exists and is readable`,
+        )
+      : new AuthConfigError(
+          "invalid-service-account",
+          `${source} at ${path} is not a valid Google service-account key`,
+        ),
+  );
+  const key = data && parseServiceAccount(data);
+  if (!key) throw new AuthConfigError("invalid-service-account", `${source} at ${path} is invalid`);
   return key;
 }
 
@@ -180,16 +205,17 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
   } else if (credentialsPath !== undefined) {
     if (!credentialsPath)
       throw new AuthConfigError("invalid-credentials-path", "GOOGLE_APPLICATION_CREDENTIALS must not be empty");
-    try {
-      JSON.parse(readFileSync(credentialsPath, "utf8"));
-    } catch (error) {
-      throw new AuthConfigError(
-        "invalid-credentials-path",
-        error instanceof SyntaxError
-          ? `GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath} contains invalid JSON`
-          : `Could not read GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath}; check that the file exists and is readable`,
-      );
-    }
+    readJsonFile(credentialsPath, isCredentialFile, (failure) =>
+      failure === "read"
+        ? new AuthConfigError(
+            "invalid-credentials-path",
+            `Could not read GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath}; check that the file exists and is readable`,
+          )
+        : new AuthConfigError(
+            "invalid-credential-file",
+            `GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath} contains invalid JSON or credential data`,
+          ),
+    );
   } else if (configuredPath) {
     serviceAccount = readServiceAccount(configuredPath, "Configured service-account key file");
   }
@@ -226,14 +252,10 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
   } catch (error) {
     if (error instanceof Error && error.message.includes(NO_ADC_MESSAGE))
       throw new AuthConfigError("missing-credentials", "Google Application Default Credentials are not configured");
-    if (
-      credentialsPath &&
-      error instanceof Error &&
-      /credential file|ENOENT|EACCES|permission denied/i.test(error.message)
-    )
+    if (credentialsPath)
       throw new AuthConfigError(
-        "invalid-credentials-path",
-        `Could not read GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath}; check that the file exists and is readable`,
+        "invalid-credential-file",
+        `GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath} contains unsupported or invalid credential data`,
       );
     throw error;
   }
@@ -266,6 +288,13 @@ function setupGuideOutput(missing: string[], status = "not configured"): string 
   return result({ auth: { status }, setup: { status: "incomplete", missing, guide: setupGuide } });
 }
 
+function invalidAuthOutput(message: string, type?: string): string {
+  return result({
+    auth: { status: "invalid", ...(type ? { type } : {}), error: message },
+    setup: { status: "incomplete", missing: [message], guide: setupGuide },
+  });
+}
+
 async function setupWithChecks(options: ProviderOptions): Promise<string> {
   try {
     const auth = await getAuthClient(options);
@@ -275,6 +304,10 @@ async function setupWithChecks(options: ProviderOptions): Promise<string> {
       return setupGuideOutput([NO_CREDENTIALS_GUIDANCE]);
     if (error instanceof AuthConfigError && error.kind === "invalid-credentials-path")
       throw new AxiError(error.message, "AUTH_CONFIG_ERROR", ["Check that the credential file exists and is readable"]);
+    if (error instanceof AuthConfigError && error.kind === "invalid-credential-file")
+      throw new AxiError(error.message, "VALIDATION_ERROR", [
+        "Check that the credential file contains valid Google credentials",
+      ]);
     if (error instanceof AuthConfigError && error.kind === "invalid-service-account")
       throw new AxiError(error.message, "VALIDATION_ERROR", [
         "Check that the service-account key contains valid Google service-account credentials",
@@ -312,15 +345,8 @@ async function authStatus(quotaProject?: string, providerOptions: ProviderOption
     if (error instanceof AuthConfigError && error.kind === "missing-credentials")
       return setupGuideOutput([NO_CREDENTIALS_GUIDANCE]);
     if (error instanceof AuthConfigError)
-      return result({
-        auth: {
-          status: "invalid",
-          ...(error.kind === "invalid-service-account" ? { type: "service_account" } : {}),
-          error: error.message,
-        },
-      });
-    if (error instanceof AxiError && error.code === "VALIDATION_ERROR")
-      return result({ auth: { status: "invalid", error: error.message } });
+      return invalidAuthOutput(error.message, error.kind === "invalid-service-account" ? "service_account" : undefined);
+    if (error instanceof AxiError && error.code === "VALIDATION_ERROR") return invalidAuthOutput(error.message);
     throw error;
   }
 }
@@ -382,9 +408,7 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
           "Check that the key file contains valid Google service-account credentials",
         ]);
       if (error instanceof AuthConfigError)
-        throw new AxiError(error.message, "AUTH_CONFIG_ERROR", [
-          "Check that the key file exists and is readable",
-        ]);
+        throw new AxiError(error.message, "AUTH_CONFIG_ERROR", ["Check that the key file exists and is readable"]);
       throw error;
     }
     const saved = {
