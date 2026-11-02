@@ -397,6 +397,10 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
       `unknown setup action '${action}'; valid actions are setup, check, status, service-account, inspect, uninstall`,
     );
   if (positionals.length || siteUrl) fail("usage: search-console-axi setup [--quota-project <project>]");
-  if (quotaProject) saveConfig({ ...readConfig(), quotaProjectId: quotaProject });
+  if (quotaProject) {
+    saveConfig({ ...readConfig(), quotaProjectId: quotaProject });
+    if (readConfig().quotaProjectId !== quotaProject)
+      throw configError(new Error("saved quota project does not match requested value"), "verify saved");
+  }
   return setupWithChecks({ ...providerOptions, ...(quotaProject ? { quotaProject } : {}) });
 }
