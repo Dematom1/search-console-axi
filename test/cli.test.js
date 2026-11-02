@@ -120,6 +120,20 @@ test("malformed ADC credential JSON is an actionable typed error", async (t) => 
   assert.equal(decode(await setupCommand(["status"])).auth.status, "invalid");
 });
 
+test("service-account setup treats malformed and invalid key contents as validation errors", (t) => {
+  const { XDG_CONFIG_HOME } = isolateAuthEnv(t);
+  for (const [name, content] of [["malformed.json", "{"], ["invalid.json", "{}"]]) {
+    const keyPath = join(XDG_CONFIG_HOME, name);
+    writeFileSync(keyPath, content);
+    const result = spawnSync(process.execPath, [cli.pathname, "setup", "service-account", keyPath], {
+      encoding: "utf8",
+      env: { ...process.env, XDG_CONFIG_HOME },
+    });
+    assert.equal(result.status, 2, result.stdout);
+    assert.match(result.stdout, /VALIDATION_ERROR/);
+  }
+});
+
 test("setup reports invalid credential and config input as validation errors", async (t) => {
   const { XDG_CONFIG_HOME } = isolateAuthEnv(t);
   setEnv(t, "SEARCH_CONSOLE_AXI_SA_KEY", "{}");

@@ -375,9 +375,13 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
     try {
       key = readServiceAccount(path, "Service-account key file");
     } catch (error) {
+      if (error instanceof AuthConfigError && error.kind === "invalid-service-account")
+        throw new AxiError(error.message, "VALIDATION_ERROR", [
+          "Check that the key file contains valid Google service-account credentials",
+        ]);
       if (error instanceof AuthConfigError)
         throw new AxiError(error.message, "AUTH_CONFIG_ERROR", [
-          "Check that the key file exists, is readable, and valid",
+          "Check that the key file exists and is readable",
         ]);
       throw error;
     }
