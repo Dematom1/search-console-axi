@@ -1,5 +1,6 @@
 import { GoogleAuth, JWT, UserRefreshClient, type AuthClient, type GoogleAuthOptions } from "google-auth-library";
 import { encode } from "@toon-format/toon";
+import { AxiError } from "axi-sdk-js";
 import { inspectUrl, runSetupCheck, setupGuide } from "./setup-check.js";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -17,7 +18,16 @@ const configDir = () =>
     : join(homedir(), ".config", "search-console-axi");
 const configFile = () => join(configDir(), "config.json");
 const fail = (message: string): never => {
-  throw new Error(message);
+  throw new AxiError(message, "VALIDATION_ERROR", [
+    "Run `search-console-axi setup --help` to see valid actions and options",
+  ]);
+};
+
+const configError = (error: unknown, action: string): AxiError => {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new AxiError(`Could not ${action} Search Console config at ${configFile()}: ${detail}`, "CONFIG_ERROR", [
+    `Check that ${configDir()} is writable and the config file is readable, then retry`,
+  ]);
 };
 
 type Config = { serviceAccountPath?: string; quotaProjectId?: string };
@@ -55,21 +65,27 @@ function readConfig(): Config {
     text = readFileSync(configFile(), "utf8");
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return {};
-    throw error;
+    throw configError(error, "read");
   }
   let data: unknown;
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error(`Config file ${configFile()} contains invalid JSON`);
+    throw new AxiError(`Config file ${configFile()} contains invalid JSON`, "CONFIG_ERROR", [
+      "Repair or remove the invalid config file",
+    ]);
   }
   if (!data || typeof data !== "object" || Array.isArray(data))
-    throw new Error(`Config file ${configFile()} has an invalid format`);
+    throw new AxiError(`Config file ${configFile()} has an invalid format`, "CONFIG_ERROR", [
+      "Repair or remove the invalid config file",
+    ]);
   if (
     ("serviceAccountPath" in data && typeof data.serviceAccountPath !== "string") ||
     ("quotaProjectId" in data && typeof data.quotaProjectId !== "string")
   )
-    throw new Error(`Config file ${configFile()} has an invalid format`);
+    throw new AxiError(`Config file ${configFile()} has an invalid format`, "CONFIG_ERROR", [
+      "Repair or remove the invalid config file",
+    ]);
   const config: Config = {};
   if ("serviceAccountPath" in data && typeof data.serviceAccountPath === "string")
     config.serviceAccountPath = data.serviceAccountPath;
@@ -78,10 +94,10 @@ function readConfig(): Config {
 }
 
 function saveConfig(config: Config): void {
-  mkdirSync(configDir(), { recursive: true, mode: 0o700 });
   const path = configFile();
   const temporaryFile = `${path}.${randomUUID()}.tmp`;
   try {
+    mkdirSync(configDir(), { recursive: true, mode: 0o700 });
     writeFileSync(temporaryFile, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600, flag: "wx" });
     renameSync(temporaryFile, path);
   } catch (error) {
@@ -89,9 +105,9 @@ function saveConfig(config: Config): void {
       unlinkSync(temporaryFile);
     } catch (cleanupError) {
       if (!(cleanupError instanceof Error && "code" in cleanupError && cleanupError.code === "ENOENT"))
-        throw cleanupError;
+        throw configError(cleanupError, "clean up temporary");
     }
-    throw error;
+    throw configError(error, "write");
   }
 }
 
@@ -124,8 +140,13 @@ function readServiceAccount(path: string, source: string): ServiceAccount {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(path, "utf8"));
-  } catch {
-    throw new AuthConfigError("invalid-service-account", `${source} is unreadable or contains invalid JSON`);
+  } catch (error) {
+    if (error instanceof SyntaxError)
+      throw new AuthConfigError("invalid-service-account", `${source} at ${path} contains invalid JSON`);
+    throw new AuthConfigError(
+      "invalid-credentials-path",
+      `${source} at ${path} is unreadable; check that the file exists and is readable`,
+    );
   }
   const key = parseServiceAccount(parsed);
   if (!key)
@@ -195,6 +216,15 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
   } catch (error) {
     if (error instanceof Error && error.message.includes(NO_ADC_MESSAGE))
       throw new AuthConfigError("missing-credentials", "Google Application Default Credentials are not configured");
+    if (
+      credentialsPath &&
+      error instanceof Error &&
+      /credential file|ENOENT|EACCES|permission denied/i.test(error.message)
+    )
+      throw new AuthConfigError(
+        "invalid-credentials-path",
+        `Could not read GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath}; check that the file exists and is readable`,
+      );
     throw error;
   }
   if (quotaOverride) credential.quotaProjectId = quotaOverride;
@@ -233,6 +263,8 @@ async function setupWithChecks(options: ProviderOptions): Promise<string> {
   } catch (error) {
     if (error instanceof AuthConfigError && error.kind === "missing-credentials")
       return setupGuideOutput([NO_CREDENTIALS_GUIDANCE]);
+    if (error instanceof AuthConfigError && error.kind === "invalid-credentials-path")
+      throw new AxiError(error.message, "AUTH_CONFIG_ERROR", ["Check that the credential file exists and is readable"]);
     if (error instanceof AuthConfigError) return setupGuideOutput([error.message], "invalid");
     throw error;
   }
@@ -310,24 +342,40 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
     if (positionals.length || quotaProject || siteUrl) fail("usage: search-console-axi setup uninstall");
     try {
       unlinkSync(configFile());
+      const verified = readConfig();
+      if (verified.serviceAccountPath || verified.quotaProjectId)
+        throw configError(new Error("saved registration remains after removal"), "verify removal of");
       return result({ auth: { status: "removed", config: "removed" } });
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "ENOENT")
         return result({ auth: { status: "not configured", config: "already absent" } });
-      throw error;
+      throw error instanceof AxiError ? error : configError(error, "remove");
     }
   }
   if (action === "service-account") {
     if (siteUrl) fail("--site is only valid with inspect");
     const [path] = positionals;
     if (positionals.length !== 1 || !path)
-      throw new Error("usage: search-console-axi setup service-account <key.json> [--quota-project <project>]");
-    const key = readServiceAccount(path, "Service-account key file");
-    saveConfig({
+      return fail("usage: search-console-axi setup service-account <key.json> [--quota-project <project>]");
+    let key: ServiceAccount;
+    try {
+      key = readServiceAccount(path, "Service-account key file");
+    } catch (error) {
+      if (error instanceof AuthConfigError)
+        throw new AxiError(error.message, "AUTH_CONFIG_ERROR", [
+          "Check that the key file exists, is readable, and valid",
+        ]);
+      throw error;
+    }
+    const saved = {
       ...readConfig(),
       serviceAccountPath: resolve(path),
       ...(quotaProject ? { quotaProjectId: quotaProject } : {}),
-    });
+    };
+    saveConfig(saved);
+    const verified = readConfig();
+    if (verified.serviceAccountPath !== saved.serviceAccountPath || verified.quotaProjectId !== saved.quotaProjectId)
+      throw configError(new Error("saved registration does not match requested values"), "verify saved");
     return result({ auth: { status: "configured", type: "service_account", account_email: key.client_email } });
   }
   if (action === "check") {
@@ -340,7 +388,10 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
     const auth = await getAuthClient({ ...providerOptions, ...(quotaProject ? { quotaProject } : {}) });
     return inspectUrl(auth, positionals[0]!, siteUrl!);
   }
-  if (action !== "setup") fail(`unknown setup action '${action}'`);
+  if (action !== "setup")
+    fail(
+      `unknown setup action '${action}'; valid actions are setup, check, status, service-account, inspect, uninstall`,
+    );
   if (positionals.length || siteUrl) fail("usage: search-console-axi setup [--quota-project <project>]");
   if (quotaProject) saveConfig({ ...readConfig(), quotaProjectId: quotaProject });
   return setupWithChecks({ ...providerOptions, ...(quotaProject ? { quotaProject } : {}) });

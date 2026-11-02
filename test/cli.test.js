@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { decode } from "@toon-format/toon";
+import { spawnSync } from "node:child_process";
 import { JWT, UserRefreshClient } from "google-auth-library";
 import { getAuthClient, setupCommand } from "../dist/bin/auth.js";
 import { runHome, inspectUrl } from "../dist/bin/setup-check.js";
@@ -330,7 +331,94 @@ test("URL inspection uses the read-only index inspection endpoint", async () => 
   assert.equal(output.indexStatusResult.verdict, "PASS");
 });
 
-test("uninstall is idempotent and removes only local config", async (t) => {
+test("setup rejects unsupported actions as validation errors with exit 2", (t) => {
+  const env = { ...isolateAuthEnv(t) };
+  const result = spawnSync(process.execPath, [cli.pathname, "setup", "hooks"], {
+    encoding: "utf8",
+    env: { ...process.env, ...env },
+  });
+  assert.equal(result.status, 2);
+  assert.match(result.stdout, /VALIDATION_ERROR/);
+  assert.match(result.stdout, /valid actions are setup, check, status, service-account, inspect, uninstall/);
+});
+
+test("missing credential files are typed actionable errors", (t) => {
+  const { XDG_CONFIG_HOME: dir } = isolateAuthEnv(t);
+  const result = spawnSync(process.execPath, [cli.pathname, "setup"], {
+    encoding: "utf8",
+    env: { ...process.env, XDG_CONFIG_HOME: dir, GOOGLE_APPLICATION_CREDENTIALS: join(dir, "missing.json") },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /AUTH_CONFIG_ERROR/);
+  assert.match(result.stdout, /missing.json/);
+  assert.match(result.stdout, /check that the file exists and is readable/i);
+});
+
+test("service-account setup saves exact local registration and denied writes preserve files", (t) => {
+  const dir = temp(t);
+  const configHome = join(dir, "config");
+  const keyPath = join(dir, "fixture.json");
+  const savedDir = join(configHome, "search-console-axi");
+  const configPath = join(savedDir, "config.json");
+  mkdirSync(savedDir, { recursive: true });
+  writeFileSync(
+    keyPath,
+    JSON.stringify({ type: "service_account", client_email: "fixture@example.invalid", private_key: "synthetic-only" }),
+  );
+  writeFileSync(configPath, '{\n  "quotaProjectId": "old-project"\n}\n');
+  const env = {
+    ...process.env,
+    XDG_CONFIG_HOME: configHome,
+    SEARCH_CONSOLE_AXI_SA_KEY: undefined,
+    GOOGLE_APPLICATION_CREDENTIALS: undefined,
+  };
+  const setup = spawnSync(process.execPath, [cli.pathname, "setup", "service-account", keyPath], {
+    encoding: "utf8",
+    env,
+  });
+  assert.equal(setup.status, 0, setup.stdout);
+  const expected = { quotaProjectId: "old-project", serviceAccountPath: keyPath };
+  assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")), expected);
+  const before = readFileSync(configPath, "utf8");
+  chmodSync(savedDir, 0o555);
+  const result = spawnSync(process.execPath, [cli.pathname, "setup", "service-account", keyPath], {
+    encoding: "utf8",
+    env,
+  });
+  chmodSync(savedDir, 0o755);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /CONFIG_ERROR/);
+  assert.match(result.stdout, /writable/);
+  assert.equal(readFileSync(configPath, "utf8"), before);
+  chmodSync(savedDir, 0o555);
+  const quota = spawnSync(process.execPath, [cli.pathname, "setup", "--quota-project", "fixture-project"], {
+    encoding: "utf8",
+    env,
+  });
+  chmodSync(savedDir, 0o755);
+  assert.equal(quota.status, 1);
+  assert.match(quota.stdout, /CONFIG_ERROR/);
+  assert.equal(readFileSync(configPath, "utf8"), before);
+});
+
+test("unreadable saved config is a typed failure, not an absent registration", (t) => {
+  const dir = temp(t);
+  const configDir = join(dir, "search-console-axi");
+  const configPath = join(configDir, "config.json");
+  mkdirSync(configDir);
+  writeFileSync(configPath, '{"quotaProjectId":"fixture-project"}\n');
+  chmodSync(configPath, 0);
+  const result = spawnSync(process.execPath, [cli.pathname, "setup", "status"], {
+    encoding: "utf8",
+    env: { ...process.env, XDG_CONFIG_HOME: dir },
+  });
+  chmodSync(configPath, 0o600);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /CONFIG_ERROR/);
+  assert.equal(readFileSync(configPath, "utf8"), '{"quotaProjectId":"fixture-project"}\n');
+});
+
+test("uninstall verifies the saved registration is actually absent", async (t) => {
   const { XDG_CONFIG_HOME: dir } = isolateAuthEnv(t);
   assert.deepEqual(decode(await setupCommand(["uninstall"])).auth, {
     status: "not configured",
