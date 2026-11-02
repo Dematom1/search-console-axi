@@ -76,7 +76,7 @@ jobs:
 
       - run: npm run build
 
-      # prepack rebuilds and checks the generated skill before packing.
+      # prepack rebuilds before packing.
       - run: |
           npm pkg set gitHead="$(git rev-parse HEAD)"
           npm pack
