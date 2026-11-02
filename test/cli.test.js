@@ -109,6 +109,18 @@ test("auth status does not guess a credential type for an invalid ADC path", asy
   assert.equal("type" in status.auth, false);
 });
 
+test("setup reports invalid credential and config input as validation errors", async (t) => {
+  const { XDG_CONFIG_HOME } = isolateAuthEnv(t);
+  setEnv(t, "SEARCH_CONSOLE_AXI_SA_KEY", "{}");
+  await assert.rejects(setupCommand([]), (error) => error.code === "VALIDATION_ERROR");
+
+  setEnv(t, "SEARCH_CONSOLE_AXI_SA_KEY", undefined);
+  mkdirSync(join(XDG_CONFIG_HOME, "search-console-axi"), { recursive: true });
+  writeFileSync(join(XDG_CONFIG_HOME, "search-console-axi", "config.json"), "{");
+  await assert.rejects(setupCommand([]), (error) => error.code === "VALIDATION_ERROR");
+  assert.equal(decode(await setupCommand(["status"])).auth.status, "invalid");
+});
+
 test("service-account JSON env takes precedence without persisting or printing its key", async (t) => {
   const { XDG_CONFIG_HOME: dir } = isolateAuthEnv(t);
   setEnv(t, "GOOGLE_APPLICATION_CREDENTIALS", undefined);

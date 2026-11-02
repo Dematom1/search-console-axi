@@ -71,19 +71,19 @@ function readConfig(): Config {
   try {
     data = JSON.parse(text);
   } catch {
-    throw new AxiError(`Config file ${configFile()} contains invalid JSON`, "CONFIG_ERROR", [
+    throw new AxiError(`Config file ${configFile()} contains invalid JSON`, "VALIDATION_ERROR", [
       "Repair or remove the invalid config file",
     ]);
   }
   if (!data || typeof data !== "object" || Array.isArray(data))
-    throw new AxiError(`Config file ${configFile()} has an invalid format`, "CONFIG_ERROR", [
+    throw new AxiError(`Config file ${configFile()} has an invalid format`, "VALIDATION_ERROR", [
       "Repair or remove the invalid config file",
     ]);
   if (
     ("serviceAccountPath" in data && typeof data.serviceAccountPath !== "string") ||
     ("quotaProjectId" in data && typeof data.quotaProjectId !== "string")
   )
-    throw new AxiError(`Config file ${configFile()} has an invalid format`, "CONFIG_ERROR", [
+    throw new AxiError(`Config file ${configFile()} has an invalid format`, "VALIDATION_ERROR", [
       "Repair or remove the invalid config file",
     ]);
   const config: Config = {};
@@ -265,6 +265,10 @@ async function setupWithChecks(options: ProviderOptions): Promise<string> {
       return setupGuideOutput([NO_CREDENTIALS_GUIDANCE]);
     if (error instanceof AuthConfigError && error.kind === "invalid-credentials-path")
       throw new AxiError(error.message, "AUTH_CONFIG_ERROR", ["Check that the credential file exists and is readable"]);
+    if (error instanceof AuthConfigError && error.kind === "invalid-service-account")
+      throw new AxiError(error.message, "VALIDATION_ERROR", [
+        "Check that the service-account key contains valid Google service-account credentials",
+      ]);
     if (error instanceof AuthConfigError) return setupGuideOutput([error.message], "invalid");
     throw error;
   }
