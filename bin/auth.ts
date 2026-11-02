@@ -180,6 +180,16 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
   } else if (credentialsPath !== undefined) {
     if (!credentialsPath)
       throw new AuthConfigError("invalid-credentials-path", "GOOGLE_APPLICATION_CREDENTIALS must not be empty");
+    try {
+      JSON.parse(readFileSync(credentialsPath, "utf8"));
+    } catch (error) {
+      throw new AuthConfigError(
+        "invalid-credentials-path",
+        error instanceof SyntaxError
+          ? `GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath} contains invalid JSON`
+          : `Could not read GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath}; check that the file exists and is readable`,
+      );
+    }
   } else if (configuredPath) {
     serviceAccount = readServiceAccount(configuredPath, "Configured service-account key file");
   }

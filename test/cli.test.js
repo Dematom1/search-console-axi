@@ -109,6 +109,17 @@ test("auth status does not guess a credential type for an invalid ADC path", asy
   assert.equal("type" in status.auth, false);
 });
 
+test("malformed ADC credential JSON is an actionable typed error", async (t) => {
+  const { XDG_CONFIG_HOME } = isolateAuthEnv(t);
+  const credentialsPath = join(XDG_CONFIG_HOME, "malformed.json");
+  writeFileSync(credentialsPath, "{");
+  setEnv(t, "GOOGLE_APPLICATION_CREDENTIALS", credentialsPath);
+  await assert.rejects(setupCommand([]), (error) =>
+    error.code === "AUTH_CONFIG_ERROR" && error.message.includes("contains invalid JSON"),
+  );
+  assert.equal(decode(await setupCommand(["status"])).auth.status, "invalid");
+});
+
 test("setup reports invalid credential and config input as validation errors", async (t) => {
   const { XDG_CONFIG_HOME } = isolateAuthEnv(t);
   setEnv(t, "SEARCH_CONSOLE_AXI_SA_KEY", "{}");
