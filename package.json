@@ -4,6 +4,11 @@
   "description": "Read-only Google Search Console CLI for agents",
   "type": "module",
   "license": "MIT",
+  "repository": "git+https://github.com/Dematom1/search-console-axi.git",
+  "homepage": "https://github.com/Dematom1/search-console-axi#readme",
+  "bugs": {
+    "url": "https://github.com/Dematom1/search-console-axi/issues"
+  },
   "bin": {
     "search-console-axi": "./dist/bin/search-console-axi.js"
   },
