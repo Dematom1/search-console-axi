@@ -12,7 +12,7 @@ node dist/bin/search-console-axi.js --help
 
 ## Authentication
 
-The CLI reads credentials through `google-auth-library`. It never stores or prints OAuth tokens or service-account keys. For personal access, create your own Desktop OAuth client and configure ADC with `gcloud auth application-default login --client-id-file=client.json --scopes=https://www.googleapis.com/auth/webmasters.readonly,https://www.googleapis.com/auth/cloud-platform`. Google's built-in `gcloud` OAuth client cannot grant the Search Console scope.
+The CLI validates credential JSON locally and authenticates through `google-auth-library`. It never stores or prints OAuth tokens or service-account keys. For personal access, create your own Desktop OAuth client and configure ADC with `gcloud auth application-default login --client-id-file=client.json --scopes=https://www.googleapis.com/auth/webmasters.readonly,https://www.googleapis.com/auth/cloud-platform`. Google's built-in `gcloud` OAuth client cannot grant the Search Console scope.
 
 ### Service account
 
