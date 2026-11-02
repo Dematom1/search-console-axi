@@ -21,7 +21,7 @@ await runAxiCli({
     try {
       return await runHome(await getAuthClient());
     } catch {
-      return setupCommand([]);
+      return setupCommand(["status"]);
     }
   },
 });

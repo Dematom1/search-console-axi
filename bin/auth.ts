@@ -1,5 +1,6 @@
 import { GoogleAuth, JWT, UserRefreshClient, type AuthClient, type GoogleAuthOptions } from "google-auth-library";
 import { encode } from "@toon-format/toon";
+import { AxiError } from "axi-sdk-js";
 import { inspectUrl, runSetupCheck, setupGuide } from "./setup-check.js";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -17,28 +18,64 @@ const configDir = () =>
     : join(homedir(), ".config", "search-console-axi");
 const configFile = () => join(configDir(), "config.json");
 const fail = (message: string): never => {
-  throw new Error(message);
+  throw new AxiError(message, "VALIDATION_ERROR", [
+    "Run `search-console-axi setup --help` to see valid actions and options",
+  ]);
+};
+
+const configError = (error: unknown, action: string): AxiError => {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new AxiError(`Could not ${action} Search Console config at ${configFile()}: ${detail}`, "CONFIG_ERROR", [
+    `Check that ${configDir()} is writable and the config file is readable, then retry`,
+  ]);
 };
 
 type Config = { serviceAccountPath?: string; quotaProjectId?: string };
-type AuthConfigErrorKind = "missing-credentials" | "invalid-service-account" | "invalid-credentials-path";
-class AuthConfigError extends Error {
+type JsonFailure = "read" | "parse" | "shape";
+type JsonFailureHandler = (failure: JsonFailure, error: unknown) => Error;
+type AuthConfigErrorKind =
+  "missing-credentials" | "invalid-service-account" | "invalid-credential-file" | "invalid-credentials-path";
+class AuthConfigError extends AxiError {
   constructor(
     readonly kind: AuthConfigErrorKind,
     message: string,
   ) {
-    super(message);
+    super(
+      message,
+      kind === "invalid-service-account" || kind === "invalid-credential-file"
+        ? "VALIDATION_ERROR"
+        : "AUTH_CONFIG_ERROR",
+      [
+        kind === "missing-credentials"
+          ? NO_CREDENTIALS_GUIDANCE
+          : kind === "invalid-credentials-path"
+            ? "Check that the credential file exists and is readable"
+            : "Provide valid authorized_user or service_account JSON credentials",
+      ],
+    );
   }
 }
-type ServiceAccount = {
+type CredentialMetadata = {
+  private_key_id?: string;
+  project_id?: string;
+  quota_project_id?: string;
+  universe_domain?: string;
+};
+type ServiceAccount = CredentialMetadata & {
   type: "service_account";
   client_email: string;
   private_key: string;
-  project_id?: string;
-  quota_project_id?: string;
 };
+type CredentialFile =
+  | ServiceAccount
+  | (CredentialMetadata & {
+      type: "authorized_user";
+      client_id: string;
+      client_secret: string;
+      refresh_token: string;
+    });
 type CredentialKind = "authorized_user" | "service_account";
-type AuthFactory = (options: GoogleAuthOptions) => Pick<GoogleAuth, "getApplicationDefault" | "getClient">;
+type AuthFactory = (options: GoogleAuthOptions) => Pick<GoogleAuth, "getApplicationDefault">;
 type ProviderOptions = { quotaProject?: string; authFactory?: AuthFactory };
 export type AuthProvider = {
   client: AuthClient;
@@ -49,39 +86,63 @@ export type AuthProvider = {
   projectId?: string;
 };
 
-function readConfig(): Config {
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function readJsonFile<T>(
+  path: string,
+  isValid: (value: unknown) => value is T,
+  onFailure: JsonFailureHandler,
+  optional = false,
+): T | undefined {
   let text: string;
   try {
-    text = readFileSync(configFile(), "utf8");
+    text = readFileSync(path, "utf8");
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return {};
-    throw error;
+    if (optional && error && typeof error === "object" && "code" in error && error.code === "ENOENT") return undefined;
+    throw onFailure("read", error);
   }
-  let data: unknown;
+  let value: unknown;
   try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`Config file ${configFile()} contains invalid JSON`);
+    value = JSON.parse(text);
+  } catch (error) {
+    throw onFailure("parse", error);
   }
-  if (!data || typeof data !== "object" || Array.isArray(data))
-    throw new Error(`Config file ${configFile()} has an invalid format`);
-  if (
-    ("serviceAccountPath" in data && typeof data.serviceAccountPath !== "string") ||
-    ("quotaProjectId" in data && typeof data.quotaProjectId !== "string")
-  )
-    throw new Error(`Config file ${configFile()} has an invalid format`);
-  const config: Config = {};
-  if ("serviceAccountPath" in data && typeof data.serviceAccountPath === "string")
-    config.serviceAccountPath = data.serviceAccountPath;
-  if ("quotaProjectId" in data && typeof data.quotaProjectId === "string") config.quotaProjectId = data.quotaProjectId;
-  return config;
+  if (!isValid(value)) throw onFailure("shape", new Error("JSON does not match the expected format"));
+  return value;
+}
+
+function isConfig(value: unknown): value is Config {
+  return (
+    isObject(value) &&
+    (!("serviceAccountPath" in value) || typeof value.serviceAccountPath === "string") &&
+    (!("quotaProjectId" in value) || typeof value.quotaProjectId === "string")
+  );
+}
+
+function readConfig(): Config {
+  const config = readJsonFile(
+    configFile(),
+    isConfig,
+    (failure, error) => {
+      if (failure === "read") return configError(error, "read");
+      return new AxiError(
+        `Config file ${configFile()} contains invalid ${failure === "parse" ? "JSON" : "format"}`,
+        "VALIDATION_ERROR",
+        ["Repair or remove the invalid config file"],
+      );
+    },
+    true,
+  );
+  return config ?? {};
 }
 
 function saveConfig(config: Config): void {
-  mkdirSync(configDir(), { recursive: true, mode: 0o700 });
   const path = configFile();
   const temporaryFile = `${path}.${randomUUID()}.tmp`;
   try {
+    mkdirSync(configDir(), { recursive: true, mode: 0o700 });
     writeFileSync(temporaryFile, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600, flag: "wx" });
     renameSync(temporaryFile, path);
   } catch (error) {
@@ -89,78 +150,102 @@ function saveConfig(config: Config): void {
       unlinkSync(temporaryFile);
     } catch (cleanupError) {
       if (!(cleanupError instanceof Error && "code" in cleanupError && cleanupError.code === "ENOENT"))
-        throw cleanupError;
+        throw configError(cleanupError, "clean up temporary");
     }
-    throw error;
+    throw configError(error, "write");
   }
 }
 
-function parseServiceAccount(data: unknown): ServiceAccount | undefined {
-  if (
-    !data ||
-    typeof data !== "object" ||
-    !("type" in data) ||
-    data.type !== "service_account" ||
-    !("client_email" in data) ||
-    typeof data.client_email !== "string" ||
-    !data.client_email.trim() ||
-    !("private_key" in data) ||
-    typeof data.private_key !== "string" ||
-    !data.private_key.trim()
-  )
-    return undefined;
-  return {
-    type: "service_account",
-    client_email: data.client_email,
-    private_key: data.private_key,
-    ...("project_id" in data && typeof data.project_id === "string" ? { project_id: data.project_id } : {}),
-    ...("quota_project_id" in data && typeof data.quota_project_id === "string"
-      ? { quota_project_id: data.quota_project_id }
-      : {}),
-  };
+function isCredentialFile(value: unknown): value is CredentialFile {
+  if (!isObject(value)) return false;
+  const required =
+    value.type === "service_account"
+      ? ["client_email", "private_key"]
+      : value.type === "authorized_user"
+        ? ["client_id", "client_secret", "refresh_token"]
+        : undefined;
+  if (!required) return false;
+  return (
+    required.every((field) => typeof value[field] === "string" && value[field].trim().length > 0) &&
+    ["private_key_id", "project_id", "quota_project_id", "universe_domain"].every(
+      (field) => !(field in value) || (typeof value[field] === "string" && value[field].trim().length > 0),
+    )
+  );
+}
+
+function isServiceAccountFile(value: unknown): value is ServiceAccount {
+  return isCredentialFile(value) && value.type === "service_account";
 }
 
 function readServiceAccount(path: string, source: string): ServiceAccount {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(path, "utf8"));
-  } catch {
-    throw new AuthConfigError("invalid-service-account", `${source} is unreadable or contains invalid JSON`);
-  }
-  const key = parseServiceAccount(parsed);
-  if (!key)
-    throw new AuthConfigError(
-      "invalid-service-account",
-      `${source} does not contain a valid Google service-account key`,
-    );
-  return key;
+  const data = readJsonFile(path, isServiceAccountFile, (failure) =>
+    failure === "read"
+      ? new AuthConfigError(
+          "invalid-credentials-path",
+          `${source} at ${path} is unreadable; check that the file exists and is readable`,
+        )
+      : new AuthConfigError(
+          "invalid-service-account",
+          `${source} at ${path} is not a valid Google service-account key`,
+        ),
+  );
+  if (!data) throw new AuthConfigError("invalid-service-account", `${source} at ${path} is invalid`);
+  return data;
 }
 
 export async function getAuthClient(options: ProviderOptions = {}): Promise<AuthProvider> {
   const config = readConfig();
   const serviceAccountJson = process.env["SEARCH_CONSOLE_AXI_SA_KEY"];
-  const credentialsPath = process.env["GOOGLE_APPLICATION_CREDENTIALS"];
+  const credentialsPath =
+    process.env["GOOGLE_APPLICATION_CREDENTIALS"] ?? process.env["google_application_credentials"];
   const configuredPath = config.serviceAccountPath;
-  let serviceAccount: ServiceAccount | undefined;
+  let fileCredentials: CredentialFile | undefined;
   if (serviceAccountJson !== undefined) {
+    let parsed: unknown;
     try {
-      serviceAccount = parseServiceAccount(JSON.parse(serviceAccountJson));
+      parsed = JSON.parse(serviceAccountJson);
     } catch {
       throw new AuthConfigError(
         "invalid-service-account",
         "SEARCH_CONSOLE_AXI_SA_KEY must contain valid service-account JSON",
       );
     }
-    if (!serviceAccount)
+    if (!isServiceAccountFile(parsed))
       throw new AuthConfigError(
         "invalid-service-account",
         "SEARCH_CONSOLE_AXI_SA_KEY does not contain a valid Google service-account key",
       );
-  } else if (credentialsPath !== undefined) {
-    if (!credentialsPath)
+    fileCredentials = parsed;
+  } else if (credentialsPath === undefined && configuredPath) {
+    fileCredentials = readServiceAccount(configuredPath, "Configured service-account key file");
+  } else {
+    if (credentialsPath === "")
       throw new AuthConfigError("invalid-credentials-path", "GOOGLE_APPLICATION_CREDENTIALS must not be empty");
-  } else if (configuredPath) {
-    serviceAccount = readServiceAccount(configuredPath, "Configured service-account key file");
+    const adcDir =
+      process.env["CLOUDSDK_CONFIG"] ||
+      (process.platform === "win32"
+        ? process.env["APPDATA"] && join(process.env["APPDATA"], "gcloud")
+        : process.env["HOME"] && join(process.env["HOME"], ".config", "gcloud"));
+    const path = credentialsPath ?? (adcDir ? join(adcDir, "application_default_credentials.json") : undefined);
+    if (path) {
+      const source =
+        credentialsPath === undefined ? "Application Default Credentials" : "GOOGLE_APPLICATION_CREDENTIALS";
+      fileCredentials = readJsonFile(
+        path,
+        isCredentialFile,
+        (failure) =>
+          failure === "read"
+            ? new AuthConfigError(
+                "invalid-credentials-path",
+                `Could not read ${source} at ${path}; check that the file exists and is readable`,
+              )
+            : new AuthConfigError(
+                "invalid-credential-file",
+                `${source} at ${path} contains invalid JSON or credential data; use authorized_user or service_account credentials`,
+              ),
+        credentialsPath === undefined,
+      );
+    }
   }
   const source =
     serviceAccountJson !== undefined
@@ -171,21 +256,35 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
           ? "service-account-path"
           : "ADC";
   const quotaOverride = options.quotaProject ?? process.env["GOOGLE_CLOUD_QUOTA_PROJECT"] ?? config.quotaProjectId;
-  if (serviceAccount) {
-    const credential = new JWT({ email: serviceAccount.client_email, key: serviceAccount.private_key, scopes: SCOPES });
-    credential.quotaProjectId = quotaOverride ?? serviceAccount.quota_project_id;
+  if (fileCredentials) {
+    const credential =
+      fileCredentials.type === "service_account"
+        ? new JWT({
+            email: fileCredentials.client_email,
+            key: fileCredentials.private_key,
+            keyId: fileCredentials.private_key_id,
+            projectId: fileCredentials.project_id,
+            universeDomain: fileCredentials.universe_domain,
+            scopes: SCOPES,
+          })
+        : new UserRefreshClient({
+            clientId: fileCredentials.client_id,
+            clientSecret: fileCredentials.client_secret,
+            refreshToken: fileCredentials.refresh_token,
+            universeDomain: fileCredentials.universe_domain,
+          });
+    credential.quotaProjectId = quotaOverride ?? fileCredentials.quota_project_id;
     return {
       client: credential,
-      type: "service_account",
+      type: fileCredentials.type,
       source,
-      email: serviceAccount.client_email,
+      ...(fileCredentials.type === "service_account" ? { email: fileCredentials.client_email } : {}),
       ...(credential.quotaProjectId ? { quotaProjectId: credential.quotaProjectId } : {}),
-      ...(serviceAccount.project_id ? { projectId: serviceAccount.project_id } : {}),
+      ...(fileCredentials.project_id ? { projectId: fileCredentials.project_id } : {}),
     };
   }
   const auth = (options.authFactory ?? ((opts) => new GoogleAuth(opts)))({
     scopes: SCOPES,
-    ...(credentialsPath ? { keyFile: credentialsPath } : {}),
     ...(quotaOverride ? { clientOptions: { quotaProjectId: quotaOverride } } : {}),
   });
   let credential: AuthClient;
@@ -219,11 +318,21 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
         : {}),
       ...(projectId ? { projectId } : {}),
     };
-  throw new Error("Unsupported Google credentials type; use authorized_user or service_account credentials");
+  throw new AuthConfigError(
+    "invalid-credential-file",
+    "Unsupported Google credentials type; use authorized_user or service_account credentials",
+  );
 }
 
-function setupGuideOutput(missing: string[], status = "not configured"): string {
-  return result({ auth: { status }, setup: { status: "incomplete", missing, guide: setupGuide } });
+function setupGuideOutput(missing: string[]): string {
+  return result({ auth: { status: "not configured" }, setup: { status: "incomplete", missing, guide: setupGuide } });
+}
+
+function invalidAuthOutput(message: string, type?: string): string {
+  return result({
+    auth: { status: "invalid", ...(type ? { type } : {}), error: message },
+    setup: { status: "incomplete", missing: [message], guide: setupGuide },
+  });
 }
 
 async function setupWithChecks(options: ProviderOptions): Promise<string> {
@@ -233,7 +342,6 @@ async function setupWithChecks(options: ProviderOptions): Promise<string> {
   } catch (error) {
     if (error instanceof AuthConfigError && error.kind === "missing-credentials")
       return setupGuideOutput([NO_CREDENTIALS_GUIDANCE]);
-    if (error instanceof AuthConfigError) return setupGuideOutput([error.message], "invalid");
     throw error;
   }
 }
@@ -266,13 +374,8 @@ async function authStatus(quotaProject?: string, providerOptions: ProviderOption
     if (error instanceof AuthConfigError && error.kind === "missing-credentials")
       return setupGuideOutput([NO_CREDENTIALS_GUIDANCE]);
     if (error instanceof AuthConfigError)
-      return result({
-        auth: {
-          status: "invalid",
-          ...(error.kind === "invalid-service-account" ? { type: "service_account" } : {}),
-          error: error.message,
-        },
-      });
+      return invalidAuthOutput(error.message, error.kind === "invalid-service-account" ? "service_account" : undefined);
+    if (error instanceof AxiError && error.code === "VALIDATION_ERROR") return invalidAuthOutput(error.message);
     throw error;
   }
 }
@@ -310,24 +413,31 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
     if (positionals.length || quotaProject || siteUrl) fail("usage: search-console-axi setup uninstall");
     try {
       unlinkSync(configFile());
+      const verified = readConfig();
+      if (verified.serviceAccountPath || verified.quotaProjectId)
+        throw configError(new Error("saved registration remains after removal"), "verify removal of");
       return result({ auth: { status: "removed", config: "removed" } });
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "ENOENT")
         return result({ auth: { status: "not configured", config: "already absent" } });
-      throw error;
+      throw error instanceof AxiError ? error : configError(error, "remove");
     }
   }
   if (action === "service-account") {
     if (siteUrl) fail("--site is only valid with inspect");
     const [path] = positionals;
     if (positionals.length !== 1 || !path)
-      throw new Error("usage: search-console-axi setup service-account <key.json> [--quota-project <project>]");
+      return fail("usage: search-console-axi setup service-account <key.json> [--quota-project <project>]");
     const key = readServiceAccount(path, "Service-account key file");
-    saveConfig({
+    const saved = {
       ...readConfig(),
       serviceAccountPath: resolve(path),
       ...(quotaProject ? { quotaProjectId: quotaProject } : {}),
-    });
+    };
+    saveConfig(saved);
+    const verified = readConfig();
+    if (verified.serviceAccountPath !== saved.serviceAccountPath || verified.quotaProjectId !== saved.quotaProjectId)
+      throw configError(new Error("saved registration does not match requested values"), "verify saved");
     return result({ auth: { status: "configured", type: "service_account", account_email: key.client_email } });
   }
   if (action === "check") {
@@ -340,8 +450,15 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
     const auth = await getAuthClient({ ...providerOptions, ...(quotaProject ? { quotaProject } : {}) });
     return inspectUrl(auth, positionals[0]!, siteUrl!);
   }
-  if (action !== "setup") fail(`unknown setup action '${action}'`);
+  if (action !== "setup")
+    fail(
+      `unknown setup action '${action}'; valid actions are setup, check, status, service-account, inspect, uninstall`,
+    );
   if (positionals.length || siteUrl) fail("usage: search-console-axi setup [--quota-project <project>]");
-  if (quotaProject) saveConfig({ ...readConfig(), quotaProjectId: quotaProject });
+  if (quotaProject) {
+    saveConfig({ ...readConfig(), quotaProjectId: quotaProject });
+    if (readConfig().quotaProjectId !== quotaProject)
+      throw configError(new Error("saved quota project does not match requested value"), "verify saved");
+  }
   return setupWithChecks({ ...providerOptions, ...(quotaProject ? { quotaProject } : {}) });
 }
