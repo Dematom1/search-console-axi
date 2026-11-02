@@ -319,6 +319,8 @@ async function authStatus(quotaProject?: string, providerOptions: ProviderOption
           error: error.message,
         },
       });
+    if (error instanceof AxiError && error.code === "VALIDATION_ERROR")
+      return result({ auth: { status: "invalid", error: error.message } });
     throw error;
   }
 }
