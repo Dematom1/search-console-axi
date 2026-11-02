@@ -14,6 +14,7 @@ import { runHome, inspectUrl } from "../dist/bin/setup-check.js";
 const cli = new URL("../dist/bin/search-console-axi.js", import.meta.url);
 const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 const scopes = ["https://www.googleapis.com/auth/webmasters.readonly"];
+const permissionDenialsUnreliable = process.platform === "win32" || process.getuid?.() === 0;
 const run = (args, env = {}) =>
   execFileSync(process.execPath, [cli.pathname, ...args], { encoding: "utf8", env: { ...process.env, ...env } });
 const temp = (t) => {
@@ -550,69 +551,81 @@ test("missing credential files are typed actionable errors", (t) => {
   }
 });
 
-test("service-account setup saves exact local registration and denied writes preserve files", (t) => {
-  const dir = temp(t);
-  const configHome = join(dir, "config");
-  const keyPath = join(dir, "fixture.json");
-  const savedDir = join(configHome, "search-console-axi");
-  const configPath = join(savedDir, "config.json");
-  mkdirSync(savedDir, { recursive: true });
-  writeFileSync(
-    keyPath,
-    JSON.stringify({ type: "service_account", client_email: "fixture@example.invalid", private_key: "synthetic-only" }),
-  );
-  writeFileSync(configPath, '{\n  "quotaProjectId": "old-project"\n}\n');
-  const env = {
-    ...process.env,
-    XDG_CONFIG_HOME: configHome,
-    SEARCH_CONSOLE_AXI_SA_KEY: undefined,
-    GOOGLE_APPLICATION_CREDENTIALS: undefined,
-  };
-  const setup = spawnSync(process.execPath, [cli.pathname, "setup", "service-account", keyPath], {
-    encoding: "utf8",
-    env,
-  });
-  assert.equal(setup.status, 0, setup.stdout);
-  const expected = { quotaProjectId: "old-project", serviceAccountPath: keyPath };
-  assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")), expected);
-  const before = readFileSync(configPath, "utf8");
-  chmodSync(savedDir, 0o555);
-  const result = spawnSync(process.execPath, [cli.pathname, "setup", "service-account", keyPath], {
-    encoding: "utf8",
-    env,
-  });
-  chmodSync(savedDir, 0o755);
-  assert.equal(result.status, 1);
-  assert.match(result.stdout, /CONFIG_ERROR/);
-  assert.match(result.stdout, /writable/);
-  assert.equal(readFileSync(configPath, "utf8"), before);
-  chmodSync(savedDir, 0o555);
-  const quota = spawnSync(process.execPath, [cli.pathname, "setup", "--quota-project", "fixture-project"], {
-    encoding: "utf8",
-    env,
-  });
-  chmodSync(savedDir, 0o755);
-  assert.equal(quota.status, 1);
-  assert.match(quota.stdout, /CONFIG_ERROR/);
-  assert.equal(readFileSync(configPath, "utf8"), before);
-});
+test(
+  "service-account setup saves exact local registration and denied writes preserve files",
+  { skip: permissionDenialsUnreliable },
+  (t) => {
+    const dir = temp(t);
+    const configHome = join(dir, "config");
+    const keyPath = join(dir, "fixture.json");
+    const savedDir = join(configHome, "search-console-axi");
+    const configPath = join(savedDir, "config.json");
+    mkdirSync(savedDir, { recursive: true });
+    writeFileSync(
+      keyPath,
+      JSON.stringify({
+        type: "service_account",
+        client_email: "fixture@example.invalid",
+        private_key: "synthetic-only",
+      }),
+    );
+    writeFileSync(configPath, '{\n  "quotaProjectId": "old-project"\n}\n');
+    const env = {
+      ...process.env,
+      XDG_CONFIG_HOME: configHome,
+      SEARCH_CONSOLE_AXI_SA_KEY: undefined,
+      GOOGLE_APPLICATION_CREDENTIALS: undefined,
+    };
+    const setup = spawnSync(process.execPath, [cli.pathname, "setup", "service-account", keyPath], {
+      encoding: "utf8",
+      env,
+    });
+    assert.equal(setup.status, 0, setup.stdout);
+    const expected = { quotaProjectId: "old-project", serviceAccountPath: keyPath };
+    assert.deepEqual(JSON.parse(readFileSync(configPath, "utf8")), expected);
+    const before = readFileSync(configPath, "utf8");
+    chmodSync(savedDir, 0o555);
+    const result = spawnSync(process.execPath, [cli.pathname, "setup", "service-account", keyPath], {
+      encoding: "utf8",
+      env,
+    });
+    chmodSync(savedDir, 0o755);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /CONFIG_ERROR/);
+    assert.match(result.stdout, /writable/);
+    assert.equal(readFileSync(configPath, "utf8"), before);
+    chmodSync(savedDir, 0o555);
+    const quota = spawnSync(process.execPath, [cli.pathname, "setup", "--quota-project", "fixture-project"], {
+      encoding: "utf8",
+      env,
+    });
+    chmodSync(savedDir, 0o755);
+    assert.equal(quota.status, 1);
+    assert.match(quota.stdout, /CONFIG_ERROR/);
+    assert.equal(readFileSync(configPath, "utf8"), before);
+  },
+);
 
-test("unreadable saved config is a typed failure, not an absent registration", (t) => {
-  const dir = temp(t);
-  const configDir = join(dir, "search-console-axi");
-  const configPath = join(configDir, "config.json");
-  mkdirSync(configDir);
-  writeFileSync(configPath, '{"quotaProjectId":"fixture-project"}\n');
-  chmodSync(configPath, 0);
-  const result = spawnSync(process.execPath, [cli.pathname, "setup", "status"], {
-    encoding: "utf8",
-    env: { ...process.env, XDG_CONFIG_HOME: dir },
-  });
-  chmodSync(configPath, 0o600);
-  assert.equal(result.status, 1);
-  assert.match(result.stdout, /CONFIG_ERROR/);
-  assert.equal(readFileSync(configPath, "utf8"), '{"quotaProjectId":"fixture-project"}\n');
-});
+test(
+  "unreadable saved config is a typed failure, not an absent registration",
+  { skip: permissionDenialsUnreliable },
+  (t) => {
+    const dir = temp(t);
+    const configDir = join(dir, "search-console-axi");
+    const configPath = join(configDir, "config.json");
+    mkdirSync(configDir);
+    writeFileSync(configPath, '{"quotaProjectId":"fixture-project"}\n');
+    chmodSync(configPath, 0);
+    const result = spawnSync(process.execPath, [cli.pathname, "setup", "status"], {
+      encoding: "utf8",
+      env: { ...process.env, XDG_CONFIG_HOME: dir },
+    });
+    chmodSync(configPath, 0o600);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /CONFIG_ERROR/);
+    assert.equal(readFileSync(configPath, "utf8"), '{"quotaProjectId":"fixture-project"}\n');
+  },
+);
 
 test("uninstall verifies the saved registration is actually absent", async (t) => {
   const { XDG_CONFIG_HOME: dir } = isolateAuthEnv(t);
