@@ -33,6 +33,8 @@ const isolateAuthEnv = (t) => {
     XDG_CONFIG_HOME: dir,
     SEARCH_CONSOLE_AXI_SA_KEY: undefined,
     GOOGLE_APPLICATION_CREDENTIALS: undefined,
+    google_application_credentials: undefined,
+    CLOUDSDK_CONFIG: dir,
     GOOGLE_CLOUD_QUOTA_PROJECT: undefined,
   };
   for (const [name, value] of Object.entries(env)) setEnv(t, name, value);
@@ -84,19 +86,21 @@ test("GOOGLE_APPLICATION_CREDENTIALS accepts authorized-user ADC files", async (
   const credentialsPath = join(dir, "adc.json");
   writeFileSync(
     credentialsPath,
-    JSON.stringify({ type: "authorized_user", client_id: "client", client_secret: "secret", refresh_token: "refresh" }),
+    JSON.stringify({
+      type: "authorized_user",
+      client_id: "client",
+      client_secret: "secret",
+      refresh_token: "refresh",
+      quota_project_id: "fixture-project",
+      universe_domain: "googleapis.com",
+    }),
   );
   setEnv(t, "GOOGLE_APPLICATION_CREDENTIALS", credentialsPath);
-  setEnv(t, "SEARCH_CONSOLE_AXI_SA_KEY", undefined);
-  const credential = new UserRefreshClient();
-  let options;
-  const auth = await getAuthClient({
-    authFactory: (opts) => {
-      options = opts;
-      return { getApplicationDefault: async () => ({ credential, projectId: null }) };
-    },
-  });
-  assert.equal(options.keyFile, credentialsPath);
+  const auth = await getAuthClient();
+  assert.ok(auth.client instanceof UserRefreshClient);
+  assert.equal(auth.client.credentials.refresh_token, "refresh");
+  assert.equal(auth.client.universeDomain, "googleapis.com");
+  assert.equal(auth.quotaProjectId, "fixture-project");
   assert.equal(auth.type, "authorized_user");
   assert.equal(auth.source, "GOOGLE_APPLICATION_CREDENTIALS");
 });
@@ -126,6 +130,112 @@ test("malformed and unsupported ADC credential JSON are typed validation errors"
     assert.equal(status.status, 0, status.stdout);
     assert.equal(decode(status.stdout).auth.status, "invalid");
   }
+});
+
+test("credential validation covers all sources and CLI consumers", (t) => {
+  const { XDG_CONFIG_HOME: dir } = isolateAuthEnv(t);
+  const credentialsPath = join(dir, "application_default_credentials.json");
+  const savedDir = join(dir, "search-console-axi");
+  const savedPath = join(savedDir, "config.json");
+  mkdirSync(savedDir);
+  const inspection = ["inspect", "https://example.com/page", "--site", "sc-domain:example.com"];
+  for (const source of ["explicit", "lowercase", "default", "env", "configured"]) {
+    writeFileSync(savedPath, JSON.stringify(source === "configured" ? { serviceAccountPath: credentialsPath } : {}));
+    for (const content of [
+      "{",
+      JSON.stringify({ type: source === "env" || source === "configured" ? "service_account" : "authorized_user" }),
+    ]) {
+      writeFileSync(credentialsPath, content);
+      const env = {
+        ...process.env,
+        GOOGLE_APPLICATION_CREDENTIALS: source === "explicit" ? credentialsPath : undefined,
+        google_application_credentials: source === "lowercase" ? credentialsPath : undefined,
+        SEARCH_CONSOLE_AXI_SA_KEY: source === "env" ? content : undefined,
+        GOOGLE_CLOUD_PROJECT: "fixture-project",
+      };
+      for (const args of [["setup"], ["setup", "check"], ["setup", ...inspection], inspection]) {
+        const output = spawnSync(process.execPath, [cli.pathname, ...args], { encoding: "utf8", env });
+        assert.equal(output.status, 2, `${source}: ${args}: ${output.stdout}`);
+        assert.match(output.stdout, /VALIDATION_ERROR/);
+        assert.doesNotMatch(output.stdout, /UNKNOWN/);
+      }
+      for (const args of [["setup", "status"], []]) {
+        const output = spawnSync(process.execPath, [cli.pathname, ...args], { encoding: "utf8", env });
+        assert.equal(output.status, 0, output.stdout);
+        assert.equal(decode(output.stdout).auth.status, "invalid");
+      }
+    }
+  }
+});
+
+test("credential shapes reject missing, empty, and mistyped fields before loading", async (t) => {
+  const { XDG_CONFIG_HOME: dir } = isolateAuthEnv(t);
+  const credentialsPath = join(dir, "application_default_credentials.json");
+  const user = { type: "authorized_user", client_id: "client", client_secret: "secret", refresh_token: "refresh" };
+  for (const valid of [user, JSON.parse(key)]) {
+    const required =
+      valid.type === "authorized_user"
+        ? ["client_id", "client_secret", "refresh_token"]
+        : ["client_email", "private_key"];
+    for (const field of [...required, "private_key_id", "project_id", "quota_project_id", "universe_domain"]) {
+      for (const value of [null, 42, {}, [], "", " ", ...(required.includes(field) ? [undefined] : [])]) {
+        writeFileSync(credentialsPath, JSON.stringify({ ...valid, [field]: value }));
+        await assert.rejects(getAuthClient(), (error) => error.code === "VALIDATION_ERROR");
+      }
+    }
+  }
+  for (const invalid of [null, [], {}, { ...user, type: "unsupported" }]) {
+    writeFileSync(credentialsPath, JSON.stringify(invalid));
+    await assert.rejects(getAuthClient(), (error) => error.code === "VALIDATION_ERROR");
+  }
+});
+
+test("default ADC loads both supported credential kinds without guessing", async (t) => {
+  const { XDG_CONFIG_HOME: dir } = isolateAuthEnv(t);
+  const credentialsPath = join(dir, "application_default_credentials.json");
+  for (const data of [
+    JSON.parse(key),
+    { type: "authorized_user", client_id: "client", client_secret: "secret", refresh_token: "refresh" },
+  ]) {
+    writeFileSync(credentialsPath, JSON.stringify({ ...data, quota_project_id: "fixture-project" }));
+    const auth = await getAuthClient();
+    assert.equal(auth.type, data.type);
+    assert.equal(auth.source, "ADC");
+    assert.equal(auth.quotaProjectId, "fixture-project");
+    if (data.type === "service_account") {
+      assert.ok(auth.client instanceof JWT);
+      assert.equal(auth.client.key, privateKey);
+      assert.deepEqual(auth.client.scopes, scopes);
+    } else {
+      assert.ok(auth.client instanceof UserRefreshClient);
+      assert.equal(auth.client.credentials.refresh_token, "refresh");
+    }
+    const status = decode(await setupCommand(["status"]));
+    assert.equal(status.auth.status, "configured");
+    assert.equal(status.auth.type, data.type);
+  }
+});
+
+test("missing ADC stays distinct from invalid credentials for every command", async (t) => {
+  isolateAuthEnv(t);
+  const options = {
+    authFactory: () => ({
+      getApplicationDefault: async () => {
+        throw new Error("Could not load the default credentials");
+      },
+    }),
+  };
+  await assert.rejects(
+    getAuthClient(options),
+    (error) => error.kind === "missing-credentials" && error.code === "AUTH_CONFIG_ERROR",
+  );
+  for (const args of [[], ["check"], ["status"]]) {
+    assert.equal(decode(await setupCommand(args, options)).auth.status, "not configured");
+  }
+  await assert.rejects(
+    setupCommand(["inspect", "https://example.com", "--site", "sc-domain:example.com"], options),
+    (error) => error.code === "AUTH_CONFIG_ERROR",
+  );
 });
 
 test("quota-project setup verifies and persists the requested local value", async (t) => {
@@ -409,14 +519,35 @@ test("setup rejects unsupported actions as validation errors with exit 2", (t) =
 
 test("missing credential files are typed actionable errors", (t) => {
   const { XDG_CONFIG_HOME: dir } = isolateAuthEnv(t);
-  const result = spawnSync(process.execPath, [cli.pathname, "setup"], {
-    encoding: "utf8",
-    env: { ...process.env, XDG_CONFIG_HOME: dir, GOOGLE_APPLICATION_CREDENTIALS: join(dir, "missing.json") },
-  });
-  assert.equal(result.status, 1);
-  assert.match(result.stdout, /AUTH_CONFIG_ERROR/);
-  assert.match(result.stdout, /missing.json/);
-  assert.match(result.stdout, /check that the file exists and is readable/i);
+  const path = join(dir, "missing.json");
+  const savedDir = join(dir, "search-console-axi");
+  mkdirSync(savedDir);
+  const inspect = ["inspect", "https://example.com", "--site", "sc-domain:example.com"];
+  for (const source of ["explicit", "configured"]) {
+    writeFileSync(
+      join(savedDir, "config.json"),
+      JSON.stringify(source === "configured" ? { serviceAccountPath: path } : {}),
+    );
+    const env = { ...process.env, GOOGLE_APPLICATION_CREDENTIALS: source === "explicit" ? path : undefined };
+    for (const args of [
+      ["setup"],
+      ["setup", "check"],
+      ["setup", ...inspect],
+      inspect,
+      ["setup", "service-account", path],
+    ]) {
+      const result = spawnSync(process.execPath, [cli.pathname, ...args], { encoding: "utf8", env });
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(result.stdout, /AUTH_CONFIG_ERROR/);
+      assert.match(result.stdout, /missing.json/);
+      assert.match(result.stdout, /check that the file exists and is readable/i);
+    }
+    for (const args of [["setup", "status"], []]) {
+      const result = spawnSync(process.execPath, [cli.pathname, ...args], { encoding: "utf8", env });
+      assert.equal(result.status, 0, result.stdout);
+      assert.equal(decode(result.stdout).auth.status, "invalid");
+    }
+  }
 });
 
 test("service-account setup saves exact local registration and denied writes preserve files", (t) => {

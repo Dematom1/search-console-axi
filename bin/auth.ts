@@ -35,23 +35,47 @@ type JsonFailure = "read" | "parse" | "shape";
 type JsonFailureHandler = (failure: JsonFailure, error: unknown) => Error;
 type AuthConfigErrorKind =
   "missing-credentials" | "invalid-service-account" | "invalid-credential-file" | "invalid-credentials-path";
-class AuthConfigError extends Error {
+class AuthConfigError extends AxiError {
   constructor(
     readonly kind: AuthConfigErrorKind,
     message: string,
   ) {
-    super(message);
+    super(
+      message,
+      kind === "invalid-service-account" || kind === "invalid-credential-file"
+        ? "VALIDATION_ERROR"
+        : "AUTH_CONFIG_ERROR",
+      [
+        kind === "missing-credentials"
+          ? NO_CREDENTIALS_GUIDANCE
+          : kind === "invalid-credentials-path"
+            ? "Check that the credential file exists and is readable"
+            : "Provide valid authorized_user or service_account JSON credentials",
+      ],
+    );
   }
 }
-type ServiceAccount = {
+type CredentialMetadata = {
+  private_key_id?: string;
+  project_id?: string;
+  quota_project_id?: string;
+  universe_domain?: string;
+};
+type ServiceAccount = CredentialMetadata & {
   type: "service_account";
   client_email: string;
   private_key: string;
-  project_id?: string;
-  quota_project_id?: string;
 };
+type CredentialFile =
+  | ServiceAccount
+  | (CredentialMetadata & {
+      type: "authorized_user";
+      client_id: string;
+      client_secret: string;
+      refresh_token: string;
+    });
 type CredentialKind = "authorized_user" | "service_account";
-type AuthFactory = (options: GoogleAuthOptions) => Pick<GoogleAuth, "getApplicationDefault" | "getClient">;
+type AuthFactory = (options: GoogleAuthOptions) => Pick<GoogleAuth, "getApplicationDefault">;
 type ProviderOptions = { quotaProject?: string; authFactory?: AuthFactory };
 export type AuthProvider = {
   client: AuthClient;
@@ -132,37 +156,25 @@ function saveConfig(config: Config): void {
   }
 }
 
-function parseServiceAccount(data: unknown): ServiceAccount | undefined {
-  if (
-    !data ||
-    typeof data !== "object" ||
-    !("type" in data) ||
-    data.type !== "service_account" ||
-    !("client_email" in data) ||
-    typeof data.client_email !== "string" ||
-    !data.client_email.trim() ||
-    !("private_key" in data) ||
-    typeof data.private_key !== "string" ||
-    !data.private_key.trim()
-  )
-    return undefined;
-  return {
-    type: "service_account",
-    client_email: data.client_email,
-    private_key: data.private_key,
-    ...("project_id" in data && typeof data.project_id === "string" ? { project_id: data.project_id } : {}),
-    ...("quota_project_id" in data && typeof data.quota_project_id === "string"
-      ? { quota_project_id: data.quota_project_id }
-      : {}),
-  };
+function isCredentialFile(value: unknown): value is CredentialFile {
+  if (!isObject(value)) return false;
+  const required =
+    value.type === "service_account"
+      ? ["client_email", "private_key"]
+      : value.type === "authorized_user"
+        ? ["client_id", "client_secret", "refresh_token"]
+        : undefined;
+  if (!required) return false;
+  return (
+    required.every((field) => typeof value[field] === "string" && value[field].trim().length > 0) &&
+    ["private_key_id", "project_id", "quota_project_id", "universe_domain"].every(
+      (field) => !(field in value) || (typeof value[field] === "string" && value[field].trim().length > 0),
+    )
+  );
 }
 
-function isServiceAccountFile(value: unknown): value is Record<string, unknown> {
-  return parseServiceAccount(value) !== undefined;
-}
-
-function isCredentialFile(value: unknown): value is Record<string, unknown> {
-  return isObject(value) && typeof value["type"] === "string" && value["type"].length > 0;
+function isServiceAccountFile(value: unknown): value is ServiceAccount {
+  return isCredentialFile(value) && value.type === "service_account";
 }
 
 function readServiceAccount(path: string, source: string): ServiceAccount {
@@ -177,47 +189,63 @@ function readServiceAccount(path: string, source: string): ServiceAccount {
           `${source} at ${path} is not a valid Google service-account key`,
         ),
   );
-  const key = data && parseServiceAccount(data);
-  if (!key) throw new AuthConfigError("invalid-service-account", `${source} at ${path} is invalid`);
-  return key;
+  if (!data) throw new AuthConfigError("invalid-service-account", `${source} at ${path} is invalid`);
+  return data;
 }
 
 export async function getAuthClient(options: ProviderOptions = {}): Promise<AuthProvider> {
   const config = readConfig();
   const serviceAccountJson = process.env["SEARCH_CONSOLE_AXI_SA_KEY"];
-  const credentialsPath = process.env["GOOGLE_APPLICATION_CREDENTIALS"];
+  const credentialsPath =
+    process.env["GOOGLE_APPLICATION_CREDENTIALS"] ?? process.env["google_application_credentials"];
   const configuredPath = config.serviceAccountPath;
-  let serviceAccount: ServiceAccount | undefined;
+  let fileCredentials: CredentialFile | undefined;
   if (serviceAccountJson !== undefined) {
+    let parsed: unknown;
     try {
-      serviceAccount = parseServiceAccount(JSON.parse(serviceAccountJson));
+      parsed = JSON.parse(serviceAccountJson);
     } catch {
       throw new AuthConfigError(
         "invalid-service-account",
         "SEARCH_CONSOLE_AXI_SA_KEY must contain valid service-account JSON",
       );
     }
-    if (!serviceAccount)
+    if (!isServiceAccountFile(parsed))
       throw new AuthConfigError(
         "invalid-service-account",
         "SEARCH_CONSOLE_AXI_SA_KEY does not contain a valid Google service-account key",
       );
-  } else if (credentialsPath !== undefined) {
-    if (!credentialsPath)
+    fileCredentials = parsed;
+  } else if (credentialsPath === undefined && configuredPath) {
+    fileCredentials = readServiceAccount(configuredPath, "Configured service-account key file");
+  } else {
+    if (credentialsPath === "")
       throw new AuthConfigError("invalid-credentials-path", "GOOGLE_APPLICATION_CREDENTIALS must not be empty");
-    readJsonFile(credentialsPath, isCredentialFile, (failure) =>
-      failure === "read"
-        ? new AuthConfigError(
-            "invalid-credentials-path",
-            `Could not read GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath}; check that the file exists and is readable`,
-          )
-        : new AuthConfigError(
-            "invalid-credential-file",
-            `GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath} contains invalid JSON or credential data`,
-          ),
-    );
-  } else if (configuredPath) {
-    serviceAccount = readServiceAccount(configuredPath, "Configured service-account key file");
+    const adcDir =
+      process.env["CLOUDSDK_CONFIG"] ||
+      (process.platform === "win32"
+        ? process.env["APPDATA"] && join(process.env["APPDATA"], "gcloud")
+        : process.env["HOME"] && join(process.env["HOME"], ".config", "gcloud"));
+    const path = credentialsPath ?? (adcDir ? join(adcDir, "application_default_credentials.json") : undefined);
+    if (path) {
+      const source =
+        credentialsPath === undefined ? "Application Default Credentials" : "GOOGLE_APPLICATION_CREDENTIALS";
+      fileCredentials = readJsonFile(
+        path,
+        isCredentialFile,
+        (failure) =>
+          failure === "read"
+            ? new AuthConfigError(
+                "invalid-credentials-path",
+                `Could not read ${source} at ${path}; check that the file exists and is readable`,
+              )
+            : new AuthConfigError(
+                "invalid-credential-file",
+                `${source} at ${path} contains invalid JSON or credential data; use authorized_user or service_account credentials`,
+              ),
+        credentialsPath === undefined,
+      );
+    }
   }
   const source =
     serviceAccountJson !== undefined
@@ -228,21 +256,35 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
           ? "service-account-path"
           : "ADC";
   const quotaOverride = options.quotaProject ?? process.env["GOOGLE_CLOUD_QUOTA_PROJECT"] ?? config.quotaProjectId;
-  if (serviceAccount) {
-    const credential = new JWT({ email: serviceAccount.client_email, key: serviceAccount.private_key, scopes: SCOPES });
-    credential.quotaProjectId = quotaOverride ?? serviceAccount.quota_project_id;
+  if (fileCredentials) {
+    const credential =
+      fileCredentials.type === "service_account"
+        ? new JWT({
+            email: fileCredentials.client_email,
+            key: fileCredentials.private_key,
+            keyId: fileCredentials.private_key_id,
+            projectId: fileCredentials.project_id,
+            universeDomain: fileCredentials.universe_domain,
+            scopes: SCOPES,
+          })
+        : new UserRefreshClient({
+            clientId: fileCredentials.client_id,
+            clientSecret: fileCredentials.client_secret,
+            refreshToken: fileCredentials.refresh_token,
+            universeDomain: fileCredentials.universe_domain,
+          });
+    credential.quotaProjectId = quotaOverride ?? fileCredentials.quota_project_id;
     return {
       client: credential,
-      type: "service_account",
+      type: fileCredentials.type,
       source,
-      email: serviceAccount.client_email,
+      ...(fileCredentials.type === "service_account" ? { email: fileCredentials.client_email } : {}),
       ...(credential.quotaProjectId ? { quotaProjectId: credential.quotaProjectId } : {}),
-      ...(serviceAccount.project_id ? { projectId: serviceAccount.project_id } : {}),
+      ...(fileCredentials.project_id ? { projectId: fileCredentials.project_id } : {}),
     };
   }
   const auth = (options.authFactory ?? ((opts) => new GoogleAuth(opts)))({
     scopes: SCOPES,
-    ...(credentialsPath ? { keyFile: credentialsPath } : {}),
     ...(quotaOverride ? { clientOptions: { quotaProjectId: quotaOverride } } : {}),
   });
   let credential: AuthClient;
@@ -252,11 +294,6 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
   } catch (error) {
     if (error instanceof Error && error.message.includes(NO_ADC_MESSAGE))
       throw new AuthConfigError("missing-credentials", "Google Application Default Credentials are not configured");
-    if (credentialsPath)
-      throw new AuthConfigError(
-        "invalid-credential-file",
-        `GOOGLE_APPLICATION_CREDENTIALS at ${credentialsPath} contains unsupported or invalid credential data`,
-      );
     throw error;
   }
   if (quotaOverride) credential.quotaProjectId = quotaOverride;
@@ -281,11 +318,14 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
         : {}),
       ...(projectId ? { projectId } : {}),
     };
-  throw new Error("Unsupported Google credentials type; use authorized_user or service_account credentials");
+  throw new AuthConfigError(
+    "invalid-credential-file",
+    "Unsupported Google credentials type; use authorized_user or service_account credentials",
+  );
 }
 
-function setupGuideOutput(missing: string[], status = "not configured"): string {
-  return result({ auth: { status }, setup: { status: "incomplete", missing, guide: setupGuide } });
+function setupGuideOutput(missing: string[]): string {
+  return result({ auth: { status: "not configured" }, setup: { status: "incomplete", missing, guide: setupGuide } });
 }
 
 function invalidAuthOutput(message: string, type?: string): string {
@@ -302,17 +342,6 @@ async function setupWithChecks(options: ProviderOptions): Promise<string> {
   } catch (error) {
     if (error instanceof AuthConfigError && error.kind === "missing-credentials")
       return setupGuideOutput([NO_CREDENTIALS_GUIDANCE]);
-    if (error instanceof AuthConfigError && error.kind === "invalid-credentials-path")
-      throw new AxiError(error.message, "AUTH_CONFIG_ERROR", ["Check that the credential file exists and is readable"]);
-    if (error instanceof AuthConfigError && error.kind === "invalid-credential-file")
-      throw new AxiError(error.message, "VALIDATION_ERROR", [
-        "Check that the credential file contains valid Google credentials",
-      ]);
-    if (error instanceof AuthConfigError && error.kind === "invalid-service-account")
-      throw new AxiError(error.message, "VALIDATION_ERROR", [
-        "Check that the service-account key contains valid Google service-account credentials",
-      ]);
-    if (error instanceof AuthConfigError) return setupGuideOutput([error.message], "invalid");
     throw error;
   }
 }
@@ -399,18 +428,7 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
     const [path] = positionals;
     if (positionals.length !== 1 || !path)
       return fail("usage: search-console-axi setup service-account <key.json> [--quota-project <project>]");
-    let key: ServiceAccount;
-    try {
-      key = readServiceAccount(path, "Service-account key file");
-    } catch (error) {
-      if (error instanceof AuthConfigError && error.kind === "invalid-service-account")
-        throw new AxiError(error.message, "VALIDATION_ERROR", [
-          "Check that the key file contains valid Google service-account credentials",
-        ]);
-      if (error instanceof AuthConfigError)
-        throw new AxiError(error.message, "AUTH_CONFIG_ERROR", ["Check that the key file exists and is readable"]);
-      throw error;
-    }
+    const key = readServiceAccount(path, "Service-account key file");
     const saved = {
       ...readConfig(),
       serviceAccountPath: resolve(path),
