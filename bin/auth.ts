@@ -76,7 +76,7 @@ type CredentialFile =
     });
 type CredentialKind = "authorized_user" | "service_account";
 type AuthFactory = (options: GoogleAuthOptions) => Pick<GoogleAuth, "getApplicationDefault">;
-type ProviderOptions = { quotaProject?: string; authFactory?: AuthFactory };
+type ProviderOptions = { quotaProject?: string; authFactory?: AuthFactory; scopes?: string[] };
 export type AuthProvider = {
   client: AuthClient;
   type: CredentialKind;
@@ -265,7 +265,7 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
             keyId: fileCredentials.private_key_id,
             projectId: fileCredentials.project_id,
             universeDomain: fileCredentials.universe_domain,
-            scopes: SCOPES,
+            scopes: options.scopes ?? SCOPES,
           })
         : new UserRefreshClient({
             clientId: fileCredentials.client_id,
@@ -284,7 +284,7 @@ export async function getAuthClient(options: ProviderOptions = {}): Promise<Auth
     };
   }
   const auth = (options.authFactory ?? ((opts) => new GoogleAuth(opts)))({
-    scopes: SCOPES,
+    scopes: options.scopes ?? SCOPES,
     ...(quotaOverride ? { clientOptions: { quotaProjectId: quotaOverride } } : {}),
   });
   let credential: AuthClient;
