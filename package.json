@@ -1,7 +1,7 @@
 {
   "name": "search-console-axi",
   "version": "0.1.0",
-  "description": "Read-only Google Search Console CLI for agents",
+  "description": "Google Search Console reporting and preview-gated Indexing API CLI for agents",
   "type": "module",
   "license": "MIT",
   "repository": "git+https://github.com/Dematom1/search-console-axi.git",

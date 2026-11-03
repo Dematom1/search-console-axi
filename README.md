@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Dematom1/search-console-axi/actions/workflows/ci.yml/badge.svg)](https://github.com/Dematom1/search-console-axi/actions/workflows/ci.yml) [![Platform: Linux and macOS](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue)](#)
 
-Read-only Google Search Console reporting and URL inspection for agents. `search-console-axi` is an [AXI](https://github.com/kunchenguid/axi) CLI. Output uses compact [TOON](https://toonformat.dev/) format. Requires Node.js 22.12 or newer.
+Google Search Console reporting, URL inspection, and preview-gated Indexing API notifications for agents. `search-console-axi` is an [AXI](https://github.com/kunchenguid/axi) CLI. Output uses compact [TOON](https://toonformat.dev/) format. Requires Node.js 22.12 or newer.
 
 ```sh
 npm install
@@ -30,3 +30,35 @@ Invalid setup arguments, malformed config, and malformed or unsupported credenti
 ## Read Search Console
 
 Run `node dist/bin/search-console-axi.js` for the default site's last seven complete days of clicks, impressions, CTR, position, top queries and pages, and low-CTR opportunities. Use `node dist/bin/search-console-axi.js inspect <url> --site <site-url>` to inspect indexing for a URL. Reporting and inspection do not modify Search Console data; setup may write or remove local configuration.
+
+## Send Indexing API notifications
+
+Google supports the [Indexing API](https://developers.google.com/search/apis/indexing-api/v3/using-api) only for pages with `JobPosting` or `BroadcastEvent` embedded in `VideoObject` structured data. DFJ job pages fit this scope. It is not a general-purpose indexing API. A successful submission acknowledges a notification, not a crawl or index guarantee.
+
+Enable the Indexing API in your Google Cloud project. The service account must be an **owner** of the Search Console property, not merely a Restricted or Full user. The same credential precedence and local configuration apply. Notification commands request `https://www.googleapis.com/auth/indexing`; reporting still requests only `webmasters.readonly`. For user ADC, reauthorize your own Desktop OAuth client with the indexing scope as well as the reporting scopes above. Existing refresh tokens cannot gain scopes automatically.
+
+```sh
+search-console-axi indexing publish https://example.com/jobs/1 --type updated
+search-console-axi indexing publish https://example.com/jobs/1 --type updated --confirm
+search-console-axi indexing publish https://example.com/jobs/1 --type deleted
+search-console-axi indexing status https://example.com/jobs/1
+search-console-axi indexing batch urls.txt --type updated
+search-console-axi indexing batch - --type deleted --confirm < urls.txt
+search-console-axi indexing quota
+```
+
+`publish` and `batch` are local previews until `--confirm`. Previews list every explicit URL target, the notification count, and the HTTP request count without loading credentials or calling Google. Batch input contains one absolute HTTP or HTTPS URL per line; blank lines are ignored. Duplicate URLs remain separate requests. URLs with embedded credentials, fragments, or whitespace are rejected. All input is validated before any submission. Each multipart batch contains at most 100 notifications, and each notification consumes quota separately.
+
+Before `--type deleted`, the page must return HTTP 404 or 410 or contain a `noindex` directive. `status` reads `urlNotifications.getMetadata`: the last notification times, not the page's indexing status. Use `inspect` for index status.
+
+Confirmed batches report every URL as `submitted`, `failed`, or `unknown`, with an HTTP status where available. Any failed or unknown result sets exit code 1. Authentication, API, and transport errors omit raw server messages and credential contents. A 403 explains the owner, API enablement, and scope requirements; a 429 explains quota exhaustion. Requests are not automatically retried. An unknown outcome may already have reached Google; check notification status before retrying. Successful URLs in a partially failed batch must not be resubmitted blindly.
+
+### Read project quota
+
+The Indexing API has no usage endpoint. `indexing quota` reads effective limits from Service Usage and today's observed request counts from Cloud Monitoring. The selected project is the configured quota project sent with requests, or the credential's `project_id` if no override exists. The output identifies that project and the source. User ADC without either project requires `setup --quota-project <project>`.
+
+Quota reads request `cloud-platform.read-only` and `monitoring.read` OAuth scopes. User ADC with `cloud-platform` also supports both endpoints. Limits require `serviceusage.quotas.get`; usage requires `monitoring.timeSeries.list` on the selected project. These optional IAM permissions are separate from Search Console ownership. The Service Usage and Cloud Monitoring APIs must be enabled.
+
+Usage covers midnight Pacific Time through the query time. Counts include completed requests and failures, grouped by API method, and may lag up to 30 minutes. These are observed requests, not authoritative daily publish quota consumption. Empty time series mean unknown, not zero. Unreadable limits or usage identify the required permission rather than inventing a number. A readable half remains available if the other fails.
+
+The [documented defaults](https://developers.google.com/search/apis/indexing-api/v3/quota-pricing) are labelled separately: 200 publish requests per day, 180 metadata requests per minute, and 380 total requests per minute. They are not reported as your project's actual limit or remaining allowance.

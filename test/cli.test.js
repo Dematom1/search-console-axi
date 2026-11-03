@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { JWT, UserRefreshClient } from "google-auth-library";
 import { getAuthClient, setupCommand } from "../dist/bin/auth.js";
 import { runHome, inspectUrl } from "../dist/bin/setup-check.js";
+import { indexingCommand, indexingScopes, parseBatch } from "../dist/bin/indexing.js";
 
 const cli = new URL("../dist/bin/search-console-axi.js", import.meta.url);
 const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
@@ -639,4 +640,291 @@ test("uninstall verifies the saved registration is actually absent", async (t) =
   writeFileSync(config, "{}\n");
   assert.deepEqual(decode(await setupCommand(["uninstall"])).auth, { status: "removed", config: "removed" });
   assert.equal(existsSync(config), false);
+});
+
+const multipart = (statuses, boundary = "response_boundary") =>
+  statuses
+    .map(
+      ([id, status]) =>
+        `--${boundary}\r\nContent-Type: application/http\r\nContent-ID: <response-item-${id}>\r\n\r\nHTTP/1.1 ${status} Result\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(status === 200 ? { urlNotificationMetadata: { latestUpdate: { type: "URL_UPDATED", notifyTime: "2026-11-03T12:00:00Z" }, private_key: "SECRET" } } : { error: { message: "SECRET" } })}\r\n`,
+    )
+    .join("") + `--${boundary}--\r\n`;
+
+test("indexing previews never resolve credentials or send HTTP; confirmed publish uses indexing scope", async (t) => {
+  isolateAuthEnv(t);
+  setEnv(t, "SEARCH_CONSOLE_AXI_SA_KEY", "invalid-secret-json");
+  const calls = [];
+  const auth = mockAuth(async (options) => {
+    calls.push(options);
+    return {
+      data: {
+        urlNotificationMetadata: {
+          latestUpdate: { type: "URL_UPDATED", notifyTime: "2026-11-03T12:00:00Z" },
+          private_key: "SECRET",
+        },
+      },
+    };
+  });
+  const args = ["publish", "https://example.com/jobs/1", "--type", "updated"];
+  assert.equal(decode(await indexingCommand(args)).mode, "preview");
+  assert.equal(decode(await indexingCommand(args, auth)).request_count, 1);
+  assert.equal(calls.length, 0);
+  const deletion = decode(await indexingCommand(["publish", args[1], "--type", "deleted"]));
+  assert.equal(deletion.type, "URL_DELETED");
+  const output = await indexingCommand([...args, "--confirm"], auth);
+  assert.equal(decode(output).results[0].status, "submitted");
+  assert.doesNotMatch(output, /SECRET|private_key/);
+  assert.equal(calls[0].url, "https://indexing.googleapis.com/v3/urlNotifications:publish");
+  assert.equal(calls[0].retry, false);
+  assert.deepEqual(calls[0].data, { url: args[1], type: "URL_UPDATED" });
+  setEnv(t, "SEARCH_CONSOLE_AXI_SA_KEY", key);
+  assert.deepEqual((await getAuthClient({ scopes: indexingScopes })).client.scopes, indexingScopes);
+  assert.deepEqual((await getAuthClient()).client.scopes, scopes);
+});
+
+test("indexing validates all operands and flags before HTTP and redacts credentials", async (t) => {
+  isolateAuthEnv(t);
+  for (const args of [
+    ["publish", "https://example.com", "--confirm"],
+    ["publish", "https://example.com", "--type", "oops"],
+    ["publish", "https://example.com", "--type", "updated", "--confim"],
+    ["status", "https://example.com", "--confirm"],
+    ["status", "https://example.com", "extra"],
+    ["status", "https://user:password@example.com"],
+    ["status", "file:///tmp/test"],
+    ["status", "https:example.com"],
+    ["status", "https://example.com/#"],
+    ["status", "https://example.com/\\\\path"],
+    ["quota", "unexpected"],
+  ])
+    await assert.rejects(
+      indexingCommand(
+        args,
+        mockAuth(() => assert.fail("HTTP during validation")),
+      ),
+      (error) => error.code === "VALIDATION_ERROR",
+    );
+  setEnv(t, "SEARCH_CONSOLE_AXI_SA_KEY", "super-secret-malformed-json");
+  await assert.rejects(
+    indexingCommand(["status", "https://example.com"]),
+    (error) => !error.message.includes("super-secret"),
+  );
+  const cliError = spawnSync(process.execPath, [cli.pathname, "indexing", "status", "https://example.com"], {
+    encoding: "utf8",
+    env: process.env,
+  });
+  assert.equal(cliError.status, 2);
+  assert.doesNotMatch(cliError.stdout + cliError.stderr, /super-secret/);
+});
+
+test("status is a read-only notification receipt, with sanitized 403 and 429 guidance", async () => {
+  let seen;
+  const output = decode(
+    await indexingCommand(
+      ["status", "https://example.com/jobs/1"],
+      mockAuth(async (options) => {
+        seen = options;
+        return { data: { latestRemove: { type: "URL_DELETED", notifyTime: "2026-11-03T12:00:00Z" } } };
+      }),
+    ),
+  );
+  assert.equal(seen.method, "GET");
+  assert.equal(seen.url, "https://indexing.googleapis.com/v3/urlNotifications/metadata");
+  assert.deepEqual(seen.params, { url: output.url });
+  assert.equal(output.latest_remove.type, "URL_DELETED");
+  assert.match(output.note, /not crawl or index status/);
+  for (const [status, pattern] of [
+    [403, /owner of the Search Console property/],
+    [429, /quota exceeded/],
+    [401, /Authentication failed/],
+    [0, /network/],
+  ]) {
+    const auth = mockAuth(async () => {
+      throw Object.assign(new Error("SECRET-token-private-key"), {
+        response: { status, data: { error: { message: "SECRET" } } },
+      });
+    });
+    await assert.rejects(indexingCommand(["status", "https://example.com"], auth), (error) => {
+      assert.match(error.message, pattern);
+      assert.doesNotMatch(error.message, /SECRET/);
+      return true;
+    });
+  }
+});
+
+test("batch previews all targets, splits at 100 and correlates out-of-order per-URL results", async (t) => {
+  const file = join(temp(t), "urls.txt");
+  const urls = Array.from({ length: 101 }, (_, index) => `https://example.com/jobs/${index}`);
+  writeFileSync(file, urls.join("\r\n") + "\r\n");
+  const args = ["batch", file, "--type", "deleted"];
+  const preview = decode(await indexingCommand(args));
+  assert.deepEqual(preview.urls, urls);
+  assert.equal(preview.request_count, 101);
+  assert.equal(preview.http_request_count, 2);
+  const calls = [];
+  const auth = mockAuth(async (options) => {
+    calls.push(options);
+    assert.equal(options.url, "https://indexing.googleapis.com/batch");
+    assert.equal(options.retry, false);
+    assert.match(options.data, /URL_DELETED/);
+    const ids = [...options.data.matchAll(/Content-ID: <item-(\d+)>/g)].map((match) => Number(match[1]));
+    assert.ok(ids.length <= 100);
+    return {
+      data: multipart(
+        ids.reverse().map((id) => [id, calls.length === 1 && id === 2 ? 403 : calls.length === 2 ? 429 : 200]),
+      ),
+      headers: new Headers({ "content-type": 'multipart/mixed; boundary="response_boundary"' }),
+    };
+  });
+  t.after(() => {
+    process.exitCode = 0;
+  });
+  const text = await indexingCommand([...args, "--confirm"], auth);
+  assert.equal(process.exitCode, 1);
+  process.exitCode = 0;
+  const output = decode(text);
+  assert.equal(calls.length, 2);
+  assert.equal(output.failed, 2);
+  assert.equal(output.submitted, 99);
+  assert.equal(output.results[2].http_status, 403);
+  assert.equal(output.results[100].http_status, 429);
+  assert.equal(output.results[0].url, urls[0]);
+  assert.doesNotMatch(text, /SECRET/);
+});
+
+test("batch rejects malformed/missing/duplicate response IDs and does not retry uncertain transport", async (t) => {
+  const urls = ["https://example.com/1", "https://example.com/2"];
+  assert.equal(parseBatch("bad", "text/plain", urls)[0].status, "unknown");
+  assert.equal(
+    parseBatch(
+      multipart([
+        [0, 200],
+        [0, 200],
+      ]),
+      "multipart/mixed; boundary=response_boundary",
+      urls,
+    )[0].status,
+    "unknown",
+  );
+  const file = join(temp(t), "urls.txt");
+  writeFileSync(file, urls.join("\n"));
+  let calls = 0;
+  t.after(() => {
+    process.exitCode = 0;
+  });
+  const result = decode(
+    await indexingCommand(
+      ["batch", file, "--type", "updated", "--confirm"],
+      mockAuth(async () => {
+        calls++;
+        throw new Error("SECRET");
+      }),
+    ),
+  );
+  process.exitCode = 0;
+  assert.equal(calls, 1);
+  assert.equal(result.results[0].status, "unknown");
+  assert.equal(result.failed, 2);
+  writeFileSync(file, urls[0] + "\ninvalid-later-url\n");
+  await assert.rejects(
+    indexingCommand(
+      ["batch", file, "--type", "updated", "--confirm"],
+      mockAuth(() => assert.fail("Submitted before validating entire file")),
+    ),
+    (error) => error.code === "VALIDATION_ERROR",
+  );
+});
+
+test("batch stdin previews and help disclose scope without credentials", (t) => {
+  isolateAuthEnv(t);
+  const result = spawnSync(process.execPath, [cli.pathname, "indexing", "batch", "-", "--type", "updated"], {
+    encoding: "utf8",
+    input: "https://example.com/jobs/1\n",
+    env: process.env,
+  });
+  assert.equal(result.status, 0, result.stdout);
+  assert.equal(decode(result.stdout).request_count, 1);
+  assert.match(run(["indexing", "publish", "--help"]), /JobPosting or BroadcastEvent/);
+});
+
+test("quota shows readable limits and observed method counts, paginates, and never guesses zero", async () => {
+  const calls = [];
+  const auth = {
+    ...mockAuth(async (options) => {
+      calls.push(options);
+      if (options.url.includes("serviceusage"))
+        return {
+          data: options.params.pageToken
+            ? { metrics: [] }
+            : {
+                nextPageToken: "next",
+                metrics: [
+                  {
+                    metric: "indexing.googleapis.com/publish_requests",
+                    consumerQuotaLimits: [{ unit: "1/d/{project}", quotaBuckets: [{ effectiveLimit: "800" }] }],
+                  },
+                ],
+              },
+        };
+      assert.match(options.params.filter, /indexing.googleapis.com/);
+      assert.equal(options.params.view, "FULL");
+      assert.match(options.params["interval.startTime"], /T0[78]:00:00.000Z/);
+      return {
+        data: {
+          timeSeries: [
+            { resource: { labels: { method: "PublishUrlNotification" } }, points: [{ value: { int64Value: "17" } }] },
+          ],
+        },
+      };
+    }),
+    projectId: "fixture-project",
+    quotaProjectId: "unrelated-project",
+  };
+  const output = decode(await indexingCommand(["quota"], auth));
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every((call) => call.url.includes("unrelated-project") && !call.url.includes("fixture-project")));
+  assert.equal(output.limits[0].effective_limit, "800");
+  assert.equal(output.usage_today.by_method[0].requests, 17);
+  assert.equal(output.documented_defaults.publish_per_day, 200);
+  assert.match(output.documented_defaults.note, /Documentation only/);
+  const unavailable = decode(
+    await indexingCommand(["quota"], {
+      ...auth,
+      client: {
+        request: async () => {
+          throw Object.assign(new Error("SECRET"), { response: { status: 403 } });
+        },
+      },
+    }),
+  );
+  assert.match(unavailable.limits, /serviceusage.quotas.get/);
+  assert.match(unavailable.usage_today.status, /monitoring.timeSeries.list/);
+  assert.doesNotMatch(JSON.stringify(unavailable), /SECRET/);
+  const empty = decode(await indexingCommand(["quota"], { ...auth, client: { request: async () => ({ data: {} }) } }));
+  assert.match(empty.usage_today.status, /unknown, not zero/);
+  assert.match(empty.limits, /unknown, not zero/);
+  for (const [reason, pattern] of [
+    ["SERVICE_DISABLED", /Enable the/],
+    ["ACCESS_TOKEN_SCOPE_INSUFFICIENT", /OAuth scope/],
+  ]) {
+    const errorAuth = {
+      ...auth,
+      client: {
+        request: async () => {
+          throw { response: { status: 403, data: { error: { details: [{ reason }], message: "SECRET" } } } };
+        },
+      },
+    };
+    const quotaResult = decode(await indexingCommand(["quota"], errorAuth));
+    assert.match(quotaResult.limits, pattern);
+    assert.match(quotaResult.usage_today.status, pattern);
+    await assert.rejects(indexingCommand(["status", "https://example.com"], errorAuth), (error) => {
+      assert.match(
+        error.message,
+        reason === "SERVICE_DISABLED" ? /Enable the Google Indexing API/ : /lack.*indexing.*scope/,
+      );
+      assert.doesNotMatch(error.message, /SECRET/);
+      return true;
+    });
+  }
 });
