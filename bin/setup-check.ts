@@ -17,7 +17,7 @@ export const setupGuide = [
   {
     step: 5,
     instruction:
-      "For personal access, use your own Desktop OAuth client and run gcloud auth application-default login --client-id-file=client.json --scopes=https://www.googleapis.com/auth/webmasters.readonly,https://www.googleapis.com/auth/cloud-platform.",
+      "For personal access, use your own Desktop OAuth client. Search Console reporting uses https://www.googleapis.com/auth/webmasters.readonly; Indexing API commands use https://www.googleapis.com/auth/indexing, and quota reads use https://www.googleapis.com/auth/cloud-platform. Include the needed scopes with gcloud auth application-default login --client-id-file=client.json --scopes=... .",
   },
 ];
 
