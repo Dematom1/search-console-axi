@@ -59,6 +59,17 @@ const mockAuth = (request) => ({
   client: { request },
 });
 
+test("inspect help succeeds without loading credentials", (t) => {
+  const { XDG_CONFIG_HOME } = isolateAuthEnv(t);
+  const result = spawnSync(process.execPath, [cli.pathname, "inspect", "--help"], {
+    encoding: "utf8",
+    env: { ...process.env, XDG_CONFIG_HOME },
+  });
+  assert.equal(result.status, 0, result.stdout);
+  assert.match(result.stdout, /usage: search-console-axi inspect <url> --site <site>/);
+  assert.doesNotMatch(result.stdout, /VALIDATION_ERROR/);
+});
+
 test("CLI reports its version and live home without credentials", (t) => {
   assert.equal(run(["--version"]).trim(), version);
   const home = decode(

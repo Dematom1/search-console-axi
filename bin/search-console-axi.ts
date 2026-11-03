@@ -18,7 +18,10 @@ await runAxiCli({
   commands: {
     setup: setupCommand,
     indexing: (args) => indexingCommand(args),
-    inspect: (args) => setupCommand(["inspect", ...args]),
+    inspect: (args) =>
+      args.includes("--help") || args.includes("-h")
+        ? "usage: search-console-axi inspect <url> --site <site> [--quota-project <project>]\n"
+        : setupCommand(["inspect", ...args]),
   },
   home: async () => {
     try {
