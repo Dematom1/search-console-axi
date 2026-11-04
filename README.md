@@ -1,6 +1,6 @@
 # search-console-axi
 
-[![CI](https://github.com/Dematom1/search-console-axi/actions/workflows/ci.yml/badge.svg)](https://github.com/Dematom1/search-console-axi/actions/workflows/ci.yml) [![Platform: Linux and macOS](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue)](#)
+[![CI](https://github.com/Dematom1/search-console-axi/actions/workflows/ci.yml/badge.svg)](https://github.com/Dematom1/search-console-axi/actions/workflows/ci.yml) [![Platform: Linux and macOS](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue)](#) [![npm weekly downloads](https://img.shields.io/npm/dw/search-console-axi)](https://www.npmjs.com/package/search-console-axi)
 
 Google Search Console reporting, URL inspection, and preview-gated Indexing API notifications for agents. `search-console-axi` is an [AXI](https://github.com/kunchenguid/axi) CLI. Output uses compact [TOON](https://toonformat.dev/) format. Requires Node.js 22.12 or newer.
 
