@@ -1,0 +1,56 @@
+name: Guard generated files
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guard-generated-files-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Generated files must not be hand-edited
+    runs-on: ubuntu-latest
+    if: >-
+      !(github.event.pull_request.user.login == 'release-please[bot]' &&
+      github.event.pull_request.user.type == 'Bot' &&
+      startsWith(github.event.pull_request.head.ref, 'release-please--') &&
+      github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check PR does not modify release-please-generated files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          if ! git cat-file -e "${BASE_SHA}:release-please-config.json" 2>/dev/null; then
+            echo "release-please is not configured on the base branch yet. OK."
+            exit 0
+          fi
+          files=$(git diff --no-renames --name-only "${BASE_SHA}...${HEAD_SHA}")
+          violated=""
+          for path in CHANGELOG.md .release-please-manifest.json; do
+            if printf '%s\n' "$files" | grep -qxF -- "$path"; then
+              violated="${violated} ${path}"
+            fi
+          done
+          base_version=$(git show "${BASE_SHA}:package.json" | jq -r '.version')
+          head_version=$(git show "${HEAD_SHA}:package.json" | jq -r '.version')
+          if [ "$base_version" != "$head_version" ]; then
+            violated="${violated} package.json(version)"
+          fi
+          if [ -n "$violated" ]; then
+            echo "::error::This PR modifies release-please-generated files:${violated}" >&2
+            echo "Do not hand-edit CHANGELOG.md, .release-please-manifest.json, or package.json's version; release-please owns these values." >&2
+            exit 1
+          fi
+          echo "No release-please-generated files modified. OK."
