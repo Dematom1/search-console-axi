@@ -27,7 +27,7 @@ Use this checklist to assess a new AXI tool. Leave items unchecked until evidenc
 - [ ] Every repeated/retried write is deduplicated using a stable retry key, or a documented API limitation exception is recorded below.
 - [ ] Partial and unknown outcomes are reported without unsafe automatic retries.
 
-**Documented retry-identity exception:** The Google Indexing API accepts no retry key. `indexing publish|batch --confirm` therefore has no retry key or local ledger. URL_UPDATED and URL_DELETED notifications are last-write-wins state signals; duplicates have no other effect and cost one quota unit (200/day default). The tool refuses automatic retries, reports unknown outcomes, and directs users to `indexing status` before resubmitting.
+**Documented retry-identity exception:** The Google Indexing API accepts no retry key. `indexing publish|batch --confirm` therefore has no retry key or local ledger. URL_UPDATED and URL_DELETED notifications are last-write-wins state signals. A duplicate changes only the requested URL's notification state and the last-notification times that `indexing status` reports, and it costs one quota unit (200/day default). Those times do not show whether an earlier submission succeeded. The tool refuses automatic retries, reports unknown outcomes, and directs users to `indexing status` before resubmitting.
 
 ## Delivery
 

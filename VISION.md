@@ -6,13 +6,13 @@ Search Console users and agents who need a safe, compact CLI for inspecting site
 
 ## Scope
 
-The tool supports Search Console performance, sitemaps, URL inspection, and Indexing API notifications for JobPosting and BroadcastEvent pages only.
+The target scope includes Search Console performance, sitemaps, URL inspection, and Indexing API notifications for JobPosting pages and BroadcastEvent markup embedded in VideoObject only. Sitemap inspection is not implemented yet.
 
 It runs on Linux and macOS. Implemented authentication sources are `SEARCH_CONSOLE_AXI_SA_KEY`, `GOOGLE_APPLICATION_CREDENTIALS` (including its lowercase alias), a saved service-account path, and user ADC. `_FILE` and `_COMMAND` credential sources are planned for SC-3.
 
 Indexing writes are preview-first and require `--confirm`. Each write names explicit per-URL targets. The CLI does not automatically retry writes and reports unknown outcomes so users can check `indexing status` before resubmitting.
 
-The Indexing API accepts no retry key. URL_UPDATED and URL_DELETED notifications are last-write-wins state signals, so a duplicate has no other effect and costs one quota unit (200 requests per day by default). No local ledger or retry-key flag is planned.
+The Indexing API accepts no retry key. URL_UPDATED and URL_DELETED notifications are last-write-wins state signals. A duplicate changes only the requested URL's notification state and the last-notification times that `indexing status` reports, and it costs one quota unit (200 requests per day by default). Those times do not show whether an earlier submission succeeded. No local ledger or retry-key flag is planned.
 
 ## Non-goals
 
