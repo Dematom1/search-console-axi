@@ -18,4 +18,5 @@ export async function run(args: string[] = []): Promise<string> {
   const site = parsed.flags.get("--site");
   return runHome(await getAuthClient(), typeof site === "string" ? site : undefined, days === undefined ? 7 : Number(days));
 }
-export const command = { name: "report", help: helpText("report", help), run };
+export const name = "report";
+export const command = { name, help: helpText(name, help), run };
