@@ -394,8 +394,6 @@ async function authStatus(quotaProject?: string, providerOptions: ProviderOption
 
 export async function setupCommand(args: string[], providerOptions: ProviderOptions = {}): Promise<string> {
   const [first, ...rest] = args;
-  if (first === "--help" || first === "-h")
-    return "usage: search-console-axi setup [--quota-project <project>] | check | status | site <url> | service-account <key.json> | uninstall\n";
   const implicitSetup = !first || first.startsWith("-");
   const action = implicitSetup ? "setup" : first;
   const operands = implicitSetup ? args : rest;

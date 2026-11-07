@@ -147,7 +147,15 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
       { site: savedDefaultSite(), source: "saved_config" },
     ];
     const requested = candidates.find((candidate) => candidate.site);
-    if (requested && !reportable.some((entry) => entry.siteUrl === requested.site))
+    const matches = (candidate: string, property: string) => {
+      if (candidate === property) return true;
+      try {
+        return property === `sc-domain:${new URL(candidate).hostname}`;
+      } catch {
+        return false;
+      }
+    };
+    if (requested && !reportable.some((entry) => matches(requested.site!, entry.siteUrl)))
       usage(`Selected site '${requested.site}' is not a verified property`);
     if (!accessible.length)
       return encode({
@@ -157,7 +165,10 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
       });
     const selected = selectVerifiedSite(
       reportable.map((entry) => entry.siteUrl),
-      candidates,
+      candidates.map((candidate) => ({
+        ...candidate,
+        site: candidate.site && reportable.find((entry) => matches(candidate.site!, entry.siteUrl))?.siteUrl,
+      })),
     );
     if (!selected)
       return encode({

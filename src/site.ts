@@ -38,12 +38,22 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ 
     { site: saved, source: "saved_config" },
   ];
   const requested = candidates.find((candidate) => candidate.site);
-  if (requested && !verified.some((entry) => entry.siteUrl === requested.site))
+  const matches = (candidate: string, property: string) => {
+    if (candidate === property) return true;
+    try {
+      const url = new URL(candidate);
+      return property === `sc-domain:${url.hostname}`;
+    } catch {
+      return false;
+    }
+  };
+  if (requested && !verified.some((entry) => matches(requested.site!, entry.siteUrl)))
     return usage(`Selected site '${requested.site}' is not a verified property`);
-  const selected = selectVerifiedSite(
-    verified.map((entry) => entry.siteUrl),
-    candidates,
-  );
+  const selectedCandidate = requested && verified.find((entry) => matches(requested.site!, entry.siteUrl));
+  const selected = selectedCandidate
+    ? { site: selectedCandidate.siteUrl, site_source: requested.source }
+    : selectVerifiedSite(verified.map((entry) => entry.siteUrl), candidates);
+
   if (!selected)
     throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
   return selected;
