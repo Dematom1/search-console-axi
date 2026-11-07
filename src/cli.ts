@@ -8,6 +8,7 @@ import { usage } from "./args.js";
 import { helpText } from "./help.js";
 import { getAuthClient, setupCommand } from "./auth.js";
 import { runHome } from "./google.js";
+import { resolveSite } from "./site.js";
 
 const description =
   "Google Search Console reporting, URL inspection, and preview-gated Indexing API notifications for agents";
@@ -42,7 +43,8 @@ export async function runAxiCli(args = process.argv.slice(2)): Promise<void> {
     }
     if (args.length === 0) {
       try {
-        process.stdout.write((await runHome(await getAuthClient())) + "\n");
+        const auth = await getAuthClient();
+        process.stdout.write((await runHome(auth, resolveSite(auth))) + "\n");
       } catch (error) {
         if (error instanceof AxiError && error.code === "VALIDATION_ERROR") throw error;
         process.stdout.write((await setupCommand(["status"])) + "\n");

@@ -35,7 +35,10 @@ export async function run(args: string[] = []): Promise<string> {
   if (typeof requestedSite === "string") validateSite(requestedSite);
   const quotaProject = parsed.flags.get("--quota-project");
   const auth = await getAuthClient({ quotaProject: typeof quotaProject === "string" ? quotaProject : undefined });
-  const { site, site_source } = await resolveSite(auth, typeof requestedSite === "string" ? requestedSite : undefined);
+  const resolution = await resolveSite(auth, typeof requestedSite === "string" ? requestedSite : undefined);
+  if (resolution.kind === "unavailable")
+    return usage("No verified Search Console sites visible; configure --site or grant access.");
+  const { site, site_source } = resolution;
   const result: unknown = decode(await inspectUrl(auth, url, site));
   const output =
     result && typeof result === "object" && !Array.isArray(result)

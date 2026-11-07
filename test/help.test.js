@@ -24,14 +24,15 @@ test("every registered command and subcommand help route decodes without credent
       ...("subcommands" in command ? Object.keys(command.subcommands).map((action) => [command.name, action]) : []),
     ]),
   ];
-  for (const args of cases) {
-    const result = spawnSync(process.execPath, [bin, ...args, "--help"], {
-      encoding: "utf8",
-      env: { ...process.env, SEARCH_CONSOLE_AXI_SA_KEY: undefined },
-    });
-    assert.equal(result.status, 0, `${args}: ${result.stdout} ${result.stderr}`);
-    assert.doesNotThrow(() => decode(result.stdout));
-  }
+  for (const flag of ["--help", "-h"])
+    for (const args of cases) {
+      const result = spawnSync(process.execPath, [bin, ...args, flag], {
+        encoding: "utf8",
+        env: { ...process.env, SEARCH_CONSOLE_AXI_SA_KEY: undefined },
+      });
+      assert.equal(result.status, 0, `${args} ${flag}: ${result.stdout} ${result.stderr}`);
+      assert.doesNotThrow(() => decode(result.stdout));
+    }
 });
 
 test("unconfigured bare home is fast and silent on stderr", (t) => {

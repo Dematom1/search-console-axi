@@ -314,6 +314,13 @@ test("Search Console command failures preserve empty-site, disabled-API, and acc
       expected: "No Search Console sites visible",
     },
     {
+      name: "empty-report",
+      args: ["report"],
+      response: { body: { siteEntry: [] } },
+      status: 2,
+      expected: "No verified Search Console sites visible",
+    },
+    {
       name: "unverified-setup",
       args: ["setup", "check"],
       response: { body: { siteEntry: [{ siteUrl: "sc-domain:example.com", permissionLevel: "siteUnverifiedUser" }] } },

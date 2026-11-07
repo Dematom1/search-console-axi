@@ -1,10 +1,9 @@
 import { encode } from "@toon-format/toon";
 import { AxiError } from "axi-sdk-js";
-import { usage } from "./args.js";
-import { savedDefaultSite, type AuthProvider } from "./auth.js";
+import type { AuthProvider } from "./auth.js";
 import { setupGuide } from "./setup-guide.js";
 import { searchDateRange } from "./period.js";
-import { isValidSite, selectVerifiedSite } from "./site.js";
+import { isValidSite, type SiteResolution } from "./site.js";
 export { setupGuide } from "./setup-guide.js";
 
 const API = "https://searchconsole.googleapis.com/webmasters/v3/sites";
@@ -137,46 +136,18 @@ export async function runSetupCheck(auth: AuthProvider): Promise<string> {
   }
 }
 
-export async function runHome(auth: AuthProvider, siteOverride?: string, days = 7): Promise<string> {
+export async function runHome(auth: AuthProvider, selection: Promise<SiteResolution>, days = 7): Promise<string> {
   try {
-    const accessible = await sites(auth);
-    const reportable = accessible.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
-    const candidates = [
-      { site: siteOverride, source: "flag" },
-      { site: process.env["SEARCH_CONSOLE_AXI_SITE"], source: "environment" },
-      { site: savedDefaultSite(), source: "saved_config" },
-    ];
-    const requested = candidates.find((candidate) => candidate.site);
-    const matches = (candidate: string, property: string) => {
-      if (candidate === property) return true;
-      try {
-        return property === `sc-domain:${new URL(candidate).hostname}`;
-      } catch {
-        return false;
-      }
-    };
-    if (requested && !reportable.some((entry) => matches(requested.site!, entry.siteUrl)))
-      usage(`Selected site '${requested.site}' is not a verified property`);
-    if (!accessible.length)
+    const resolution = await selection;
+    if (resolution.kind === "unavailable")
       return encode({
         tool: "search-console-axi",
-        sites: "No Search Console sites visible to this account - grant access as in step 4, or none exist.",
+        sites: resolution.visibleSiteCount
+          ? "No verified Search Console sites visible to this account - grant access as in step 4, or none exist."
+          : "No Search Console sites visible to this account - grant access as in step 4, or none exist.",
         help: ["Run search-console-axi setup for access instructions."],
       });
-    const selected = selectVerifiedSite(
-      reportable.map((entry) => entry.siteUrl),
-      candidates.map((candidate) => ({
-        ...candidate,
-        site: candidate.site && reportable.find((entry) => matches(candidate.site!, entry.siteUrl))?.siteUrl,
-      })),
-    );
-    if (!selected)
-      return encode({
-        tool: "search-console-axi",
-        sites: "No verified Search Console sites visible to this account - grant access as in step 4, or none exist.",
-        help: ["Run search-console-axi setup for access instructions."],
-      });
-    const { site, site_source } = selected;
+    const { site, site_source, verifiedSiteCount } = resolution;
     const range = searchDateRange();
     const dateRange =
       days === 7
@@ -245,7 +216,7 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
       tool: "search-console-axi",
       site,
       site_source,
-      sites: reportable.length,
+      sites: verifiedSiteCount,
       period: `last ${days} complete days`,
       totals: formatRows([summaryRows[0] ?? { clicks: 0, impressions: 0, ctr: 0, position: 0 }])[0],
       top_queries: formatRows(queries),

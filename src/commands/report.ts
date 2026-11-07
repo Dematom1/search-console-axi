@@ -2,7 +2,7 @@ import { getAuthClient } from "../auth.js";
 import { runHome } from "../google.js";
 import { parseArgs, usage } from "../args.js";
 import { helpText, type Help } from "../help.js";
-import { validateSite } from "../site.js";
+import { resolveSite, validateSite } from "../site.js";
 
 export const help: Help = {
   purpose: "Report Search Console performance for a property.",
@@ -22,11 +22,13 @@ export async function run(args: string[] = []): Promise<string> {
     usage("--days must be between 1 and 90");
   const site = parsed.flags.get("--site");
   if (typeof site === "string") validateSite(site);
-  return runHome(
-    await getAuthClient(),
-    typeof site === "string" ? site : undefined,
-    days === undefined ? 7 : Number(days),
-  );
+  const auth = await getAuthClient();
+  const selection = resolveSite(auth, typeof site === "string" ? site : undefined).then((resolution) => {
+    if (resolution.kind === "unavailable")
+      usage("No verified Search Console sites visible; configure --site or grant access.");
+    return resolution;
+  });
+  return runHome(auth, selection, days === undefined ? 7 : Number(days));
 }
 export const name = "report";
 export const command = { name, help: helpText(name, help), run };

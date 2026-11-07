@@ -16,6 +16,9 @@ export function validateSite(site: string): string {
   if (isValidSite(site)) return site;
   return usage("site must be a sc-domain: property or absolute HTTP(S) URL without credentials");
 }
+export type SiteResolution =
+  | { kind: "selected"; site: string; site_source: string; verifiedSiteCount: number }
+  | { kind: "unavailable"; visibleSiteCount: number };
 export function selectVerifiedSite(
   sites: string[],
   candidates: { site: string | undefined; source: string }[],
@@ -27,7 +30,7 @@ export function selectVerifiedSite(
   const site = [...sites].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[0];
   return site ? { site, site_source: "first_verified" } : undefined;
 }
-export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ site: string; site_source: string }> {
+export async function resolveSite(auth: AuthProvider, flag?: string): Promise<SiteResolution> {
   const environment = process.env["SEARCH_CONSOLE_AXI_SITE"];
   const saved = savedDefaultSite();
   const entries = await sites(auth);
@@ -52,9 +55,11 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ 
   const selectedCandidate = requested && verified.find((entry) => matches(requested.site!, entry.siteUrl));
   const selected = selectedCandidate
     ? { site: selectedCandidate.siteUrl, site_source: requested.source }
-    : selectVerifiedSite(verified.map((entry) => entry.siteUrl), candidates);
+    : selectVerifiedSite(
+        verified.map((entry) => entry.siteUrl),
+        candidates,
+      );
 
-  if (!selected)
-    throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
-  return selected;
+  if (!selected) return { kind: "unavailable", visibleSiteCount: entries.length };
+  return { kind: "selected", ...selected, verifiedSiteCount: verified.length };
 }
