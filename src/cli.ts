@@ -43,7 +43,8 @@ export async function runAxiCli(args = process.argv.slice(2)): Promise<void> {
     if (args.length === 0) {
       try {
         process.stdout.write((await runHome(await getAuthClient())) + "\n");
-      } catch {
+      } catch (error) {
+        if (error instanceof AxiError && error.code === "VALIDATION_ERROR") throw error;
         process.stdout.write((await setupCommand(["status"])) + "\n");
       }
       return;
