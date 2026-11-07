@@ -10,6 +10,11 @@
       "method": "POST",
       "path": "/urlInspection/index:inspect",
       "body": { "inspectionResult": { "indexStatusResult": { "verdict": "PASS" } } }
+    },
+    {
+      "method": "GET",
+      "path": "/urlNotifications/metadata",
+      "body": { "latestUpdate": { "type": "URL_UPDATED", "notifyTime": "2026-11-03T12:00:00Z" } }
     }
   ]
 }
