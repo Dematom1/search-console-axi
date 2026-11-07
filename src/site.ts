@@ -15,7 +15,7 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ 
   );
   const verified = entries.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
   const requested = flag ?? environment ?? saved;
-  const site = requested ?? verified.map((entry) => entry.siteUrl).sort((a, b) => a.localeCompare(b))[0];
+  const site = requested ?? verified.map((entry) => entry.siteUrl).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[0];
   if (!site || !verified.some((entry) => entry.siteUrl === site))
     throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
   return { site, site_source: flag ? "flag" : environment ? "environment" : saved ? "saved_config" : "first_verified" };
