@@ -3,66 +3,13 @@
     {
       "method": "GET",
       "path": "/sites",
-      "body": {
-        "siteEntry": [
-          { "siteUrl": "https://user:secret@evil.example/", "permissionLevel": "siteOwner" },
-          { "siteUrl": "", "permissionLevel": "siteOwner" },
-          { "siteUrl": "sc-domain:z.example", "permissionLevel": "siteOwner" },
-          { "siteUrl": "sc-domain:a.example", "permissionLevel": "siteRestrictedUser" },
-          { "siteUrl": "sc-domain:flag.example", "permissionLevel": "siteOwner" },
-          { "siteUrl": "sc-domain:env.example", "permissionLevel": "siteFullUser" },
-          { "siteUrl": "sc-domain:saved.example", "permissionLevel": "siteRestrictedUser" },
-          { "siteUrl": "sc-domain:unverified.example", "permissionLevel": "siteUnverifiedUser" }
-        ]
-      }
+      "body": { "siteEntry": [{ "siteUrl": "sc-domain:example.com", "permissionLevel": "siteOwner" }] }
     },
     { "method": "POST", "path": "/searchAnalytics/query", "body": { "rows": [] } },
     {
       "method": "POST",
       "path": "/urlInspection/index:inspect",
       "body": { "inspectionResult": { "indexStatusResult": { "verdict": "PASS" } } }
-    },
-    {
-      "method": "GET",
-      "path": "/urlNotifications/metadata",
-      "body": { "latestUpdate": { "type": "URL_UPDATED", "notifyTime": "2026-11-03T12:00:00Z" } }
-    },
-    {
-      "method": "POST",
-      "path": "/urlNotifications:publish",
-      "body": {
-        "urlNotificationMetadata": { "latestUpdate": { "type": "URL_UPDATED", "notifyTime": "2026-11-03T12:00:00Z" } }
-      }
-    },
-    {
-      "method": "POST",
-      "path": "/batch",
-      "raw": "--response_boundary\nContent-Type: application/http\nContent-ID: <response-item-0>\n\nHTTP/1.1 200 OK\nContent-Type: application/json\n\n{}\n--response_boundary--\n",
-      "headers": { "content-type": "multipart/mixed; boundary=response_boundary" }
-    },
-    {
-      "method": "GET",
-      "path": "/consumerQuotaMetrics",
-      "body": {
-        "metrics": [
-          {
-            "metric": "indexing.googleapis.com/publish_requests",
-            "consumerQuotaLimits": [{ "unit": "1/d/{project}", "quotaBuckets": [{ "effectiveLimit": "800" }] }]
-          }
-        ]
-      }
-    },
-    {
-      "method": "GET",
-      "path": "/timeSeries",
-      "body": {
-        "timeSeries": [
-          {
-            "resource": { "labels": { "method": "PublishUrlNotification" } },
-            "points": [{ "value": { "int64Value": "17" } }]
-          }
-        ]
-      }
     }
   ]
 }

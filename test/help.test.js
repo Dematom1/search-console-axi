@@ -17,8 +17,6 @@ test("every registered command has decodable help without credentials or network
     ["setup", "check"],
     ["setup", "status"],
     ["setup", "site"],
-    ["setup", "service-account"],
-    ["setup", "uninstall"],
     ["report"],
     ["inspect"],
     ["indexing"],

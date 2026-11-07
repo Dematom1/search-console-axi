@@ -1,5 +1,4 @@
 import { appendFileSync, readFileSync } from "node:fs";
-import { setImmediate } from "node:timers/promises";
 const scenario = JSON.parse(readFileSync(process.env.FAKE_GSC_SCENARIO, "utf8"));
 const log = process.env.FAKE_LOG;
 let active = 0;
@@ -23,15 +22,11 @@ globalThis.fetch = async (input, init = {}) => {
   active++;
   maximum = Math.max(maximum, active);
   try {
-    await setImmediate();
     const entry = scenario.responses?.find((item) => item.method === method && url.includes(item.path));
     if (target.hostname === "oauth2.googleapis.com")
       return Response.json(scenario.token ?? { access_token: "fake-token", expires_in: 3600, token_type: "Bearer" });
     if (!entry) throw new Error(`No fake response for ${method} ${url}`);
-    return new Response(entry.raw ?? JSON.stringify(entry.body ?? {}), {
-      status: entry.status ?? 200,
-      headers: entry.headers ?? { "content-type": "application/json" },
-    });
+    return Response.json(entry.body ?? {}, { status: entry.status ?? 200 });
   } finally {
     active--;
   }

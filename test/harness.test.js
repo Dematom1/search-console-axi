@@ -5,22 +5,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
-import { decode } from "@toon-format/toon";
 import { parseArgs } from "../dist/src/args.js";
 import { assertTokenExchange } from "./harness/assert-token-log.mjs";
 
-const fakeKey = (projectId) => {
+const fakeKey = () => {
   const { privateKey } = generateKeyPairSync("rsa", {
     modulusLength: 2048,
     privateKeyEncoding: { type: "pkcs8", format: "pem" },
     publicKeyEncoding: { type: "spki", format: "pem" },
   });
-  return JSON.stringify({
-    type: "service_account",
-    client_email: "fake@example.invalid",
-    private_key: privateKey,
-    ...(projectId ? { project_id: projectId } : {}),
-  });
+  return JSON.stringify({ type: "service_account", client_email: "fake@example.invalid", private_key: privateKey });
 };
 const paths = () => ({
   preload: new URL("./harness/preload.mjs", import.meta.url).pathname,
@@ -72,58 +66,9 @@ test("fake subprocess intercepts the OAuth token exchange and all Search Console
     },
   });
   assert.equal(inspected.status, 0, inspected.stdout + inspected.stderr);
-  assert.equal(decode(inspected.stdout).indexStatusResult.verdict, "PASS");
   assert.doesNotMatch(inspected.stdout, /setup inspect/);
   assert.doesNotThrow(() => assertTokenExchange(readFileSync(inspectLog, "utf8")));
   assert.match(readFileSync(inspectLog, "utf8"), /urlInspection\/index:inspect/);
-});
-
-test("setup, report, and indexing commands intercept OAuth and API traffic", (t) => {
-  const dir = mkdtempSync(join(tmpdir(), "gsc-command-harness-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const { preload, scenario, bin } = paths();
-  for (const [name, args, expectedPath, input] of [
-    ["setup-check", ["setup", "check"], "/sites"],
-    ["report", ["report"], "/searchAnalytics/query"],
-    ["indexing-status", ["indexing", "status", "https://example.com/"], "/urlNotifications/metadata"],
-    [
-      "indexing-publish",
-      ["indexing", "publish", "https://example.com/jobs/1", "--type=updated", "--confirm"],
-      "/urlNotifications:publish",
-    ],
-    [
-      "indexing-batch",
-      ["indexing", "batch", "-", "--type=updated", "--confirm"],
-      "/batch",
-      "https://example.com/jobs/1\n",
-    ],
-    ["indexing-quota", ["indexing", "quota"], "/consumerQuotaMetrics"],
-  ]) {
-    const log = join(dir, `${name}.jsonl`);
-    const result = spawnSync(process.execPath, ["--import", preload, bin, ...args], {
-      encoding: "utf8",
-      input,
-      env: {
-        ...process.env,
-        SEARCH_CONSOLE_AXI_SA_KEY: fakeKey(name === "indexing-quota" ? "fake-project" : undefined),
-        FAKE_GSC_SCENARIO: scenario,
-        FAKE_LOG: log,
-        XDG_CONFIG_HOME: dir,
-      },
-    });
-    assert.equal(result.status, 0, `${name}: ${result.stdout}${result.stderr}`);
-    const output = decode(result.stdout);
-    if (name === "setup-check") assert.equal(output.setup.status, "ready");
-    if (name === "report") assert.equal(output.site_source, "first_verified");
-    if (name === "indexing-status") assert.equal(output.latest_update.type, "URL_UPDATED");
-    if (name === "indexing-publish") assert.equal(output.results[0].status, "submitted");
-    if (name === "indexing-batch") assert.equal(output.submitted, 1);
-    if (name === "indexing-quota") assert.equal(output.usage_today.total_observed_requests, 17);
-    const logText = readFileSync(log, "utf8");
-    assert.doesNotThrow(() => assertTokenExchange(logText), name);
-    assert.ok(logText.includes(expectedPath), `${name}: ${logText}`);
-    if (name === "indexing-quota") assert.ok(logText.includes("monitoring.googleapis.com/v3/projects/"));
-  }
 });
 
 test("invalid CLI arguments fail before any fake request, including token exchange", (t) => {

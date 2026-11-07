@@ -7,7 +7,6 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "./args.js";
-import { validateSite } from "./site.js";
 
 const SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"];
 const NO_ADC_MESSAGE = "Could not load the default credentials";
@@ -170,10 +169,9 @@ function isCredentialFile(value: unknown): value is CredentialFile {
   if (!required) return false;
   return (
     required.every((field) => typeof value[field] === "string" && value[field].trim().length > 0) &&
-    ["private_key_id", "project_id", "quota_project_id"].every(
+    ["private_key_id", "project_id", "quota_project_id", "universe_domain"].every(
       (field) => !(field in value) || (typeof value[field] === "string" && value[field].trim().length > 0),
-    ) &&
-    (!("universe_domain" in value) || value.universe_domain === "googleapis.com")
+    )
   );
 }
 
@@ -409,7 +407,8 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
   if (action === "site") {
     if (positionals.length !== 1) fail("usage: search-console-axi setup site <url>");
     const site = positionals[0] ?? fail("usage: search-console-axi setup site <url>");
-    validateSite(site);
+    if (!site.startsWith("sc-domain:") && !/^https?:\/\//.test(site))
+      fail("site must be a sc-domain: property or HTTP(S) URL");
     saveDefaultSite(site);
     if (savedDefaultSite() !== site)
       throw configError(new Error("saved site does not match requested value"), "verify saved");

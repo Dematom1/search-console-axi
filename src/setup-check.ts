@@ -2,11 +2,9 @@ import { encode } from "@toon-format/toon";
 import { savedDefaultSite, type AuthProvider } from "./auth.js";
 import { setupGuide } from "./setup-guide.js";
 import { searchDateRange } from "./period.js";
-import { isValidSite, selectVerifiedSite } from "./site.js";
 export { setupGuide } from "./setup-guide.js";
 
 const API = "https://searchconsole.googleapis.com/webmasters/v3/sites";
-const verifiedPermissions = new Set(["siteOwner", "siteFullUser", "siteRestrictedUser"]);
 
 type Site = { siteUrl: string; permissionLevel?: string };
 
@@ -80,11 +78,7 @@ async function sites(auth: AuthProvider): Promise<Site[]> {
   const data = await request(auth, API);
   if (!data || typeof data !== "object" || !("siteEntry" in data) || !Array.isArray(data.siteEntry)) return [];
   return data.siteEntry.flatMap((site) =>
-    site &&
-    typeof site === "object" &&
-    "siteUrl" in site &&
-    typeof site.siteUrl === "string" &&
-    isValidSite(site.siteUrl)
+    site && typeof site === "object" && "siteUrl" in site && typeof site.siteUrl === "string"
       ? [
           {
             siteUrl: site.siteUrl,
@@ -100,7 +94,7 @@ async function sites(auth: AuthProvider): Promise<Site[]> {
 export async function runSetupCheck(auth: AuthProvider): Promise<string> {
   try {
     const accessible = await sites(auth);
-    const reportable = accessible.filter((site) => verifiedPermissions.has(site.permissionLevel ?? ""));
+    const reportable = accessible.filter((site) => site.permissionLevel !== "siteUnverifiedUser");
     const missing = reportable.length
       ? []
       : ["No verified Search Console sites visible to this account - grant access as in step 4, or none exist."];
@@ -135,7 +129,7 @@ export async function runSetupCheck(auth: AuthProvider): Promise<string> {
   }
 }
 
-export async function runHome(auth: AuthProvider, siteOverride?: string, days = 7): Promise<string> {
+export async function runHome(auth: AuthProvider, siteOverride?: string): Promise<string> {
   try {
     const accessible = await sites(auth);
     if (!accessible.length)
@@ -144,30 +138,25 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
         sites: "No Search Console sites visible to this account - grant access as in step 4, or none exist.",
         help: ["Run search-console-axi setup for access instructions."],
       });
-    const reportable = accessible.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
-    const selected = selectVerifiedSite(
-      reportable.map((entry) => entry.siteUrl),
-      [
-        { site: siteOverride, source: "flag" },
-        { site: process.env["SEARCH_CONSOLE_AXI_SITE"], source: "environment" },
-        { site: savedDefaultSite(), source: "saved_config" },
-      ],
-    );
-    if (!selected)
+    const reportable = accessible.filter((entry) => entry.permissionLevel !== "siteUnverifiedUser");
+    const environmentSite = process.env["SEARCH_CONSOLE_AXI_SITE"];
+    const savedSite = savedDefaultSite();
+    const sorted = reportable.map((entry) => entry.siteUrl).sort((a, b) => a.localeCompare(b));
+    const site = siteOverride ?? environmentSite ?? savedSite ?? sorted[0];
+    const siteSource = siteOverride
+      ? "flag"
+      : environmentSite
+        ? "environment"
+        : savedSite
+          ? "saved_config"
+          : "first_verified";
+    if (!site)
       return encode({
         tool: "search-console-axi",
         sites: "No verified Search Console sites visible to this account - grant access as in step 4, or none exist.",
         help: ["Run search-console-axi setup for access instructions."],
       });
-    const { site, site_source } = selected;
-    const range = searchDateRange();
-    const dateRange =
-      days === 7
-        ? range
-        : {
-            ...range,
-            startDate: new Date(Date.parse(range.endDate) - (days - 1) * 86_400_000).toISOString().slice(0, 10),
-          };
+    const dateRange = searchDateRange();
     const query = async (dimension: "query" | "page", orderBy: string) => {
       const result = await request(auth, `${API}/${encodeURIComponent(site)}/searchAnalytics/query`, "POST", {
         ...dateRange,
@@ -227,9 +216,9 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
     return encode({
       tool: "search-console-axi",
       site,
-      site_source,
+      site_source: siteSource,
       sites: reportable.length,
-      period: `last ${days} complete days`,
+      period: "last 7 complete days",
       totals: formatRows([summaryRows[0] ?? { clicks: 0, impressions: 0, ctr: 0, position: 0 }])[0],
       top_queries: formatRows(queries),
       top_pages: formatRows(pages),

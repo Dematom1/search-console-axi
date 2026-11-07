@@ -21,23 +21,24 @@ export function getCommandHelp(args: string[]): string {
       examples: ["search-console-axi", "search-console-axi report"],
       next: commands.map((command) => `search-console-axi ${command.name}`),
     });
+  if (args[0] === "setup" && args[1])
+    return helpText(`setup ${args[1]}`, {
+      purpose: `Run setup ${args[1]} action.`,
+      flags: { "--help": "Show this help" },
+      examples: [`search-console-axi setup ${args[1]}`],
+      next: ["search-console-axi setup check"],
+    });
   const command = registry.get(args[0]!);
-  if (command) {
-    const action = args[1];
-    if (action && "subcommands" in command && action in command.subcommands)
-      return command.subcommands[action as keyof typeof command.subcommands];
-    return command.help;
-  }
+  if (command) return command.help;
   return getCommandHelp([]);
 }
 export async function runAxiCli(args = process.argv.slice(2)): Promise<void> {
   process.env.METADATA_SERVER_DETECTION ??= "none";
   try {
     if (args.includes("--help") || args.includes("-h")) {
-      const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
-      const prefix = args.slice(0, helpIndex);
-      if (prefix.some((arg) => arg.startsWith("-") && arg !== "-")) usage("Help cannot follow command options");
-      process.stdout.write(getCommandHelp(prefix) + "\n");
+      process.stdout.write(
+        getCommandHelp(args.slice(0, args.indexOf(args.includes("--help") ? "--help" : "-h"))) + "\n",
+      );
       return;
     }
     if (args.length === 0) {

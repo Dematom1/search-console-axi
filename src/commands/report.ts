@@ -2,15 +2,10 @@ import { getAuthClient } from "../auth.js";
 import { runHome } from "../google.js";
 import { parseArgs, usage } from "../args.js";
 import { helpText, type Help } from "../help.js";
-import { validateSite } from "../site.js";
 
 export const help: Help = {
   purpose: "Report Search Console performance for a property.",
-  flags: {
-    "--site <site>": "Select property",
-    "--days <1..90>": "Report period (default: 7 days)",
-    "--help": "Show this help",
-  },
+  flags: { "--site <site>": "Select property", "--days <1..90>": "Report period", "--help": "Show this help" },
   examples: ["search-console-axi report", "search-console-axi report --site sc-domain:example.com"],
   next: ["search-console-axi inspect <url>", "search-console-axi setup check"],
 };
@@ -21,12 +16,6 @@ export async function run(args: string[] = []): Promise<string> {
   if (days !== undefined && (typeof days !== "string" || !/^\d+$/.test(days) || Number(days) < 1 || Number(days) > 90))
     usage("--days must be between 1 and 90");
   const site = parsed.flags.get("--site");
-  if (typeof site === "string") validateSite(site);
-  return runHome(
-    await getAuthClient(),
-    typeof site === "string" ? site : undefined,
-    days === undefined ? 7 : Number(days),
-  );
+  return runHome(await getAuthClient(), typeof site === "string" ? site : undefined);
 }
-export const name = "report";
-export const command = { name, help: helpText(name, help), run };
+export const command = { name: "report", help: helpText("report", help), run };
