@@ -73,9 +73,11 @@ test("report resolves sites by flag, environment, saved config, then stable veri
       XDG_CONFIG_HOME: dir,
       FAKE_GSC_SCENARIO: scenario,
       FAKE_LOG: saveLog,
+      SEARCH_CONSOLE_AXI_SA_KEY: key(),
     },
   });
   assert.equal(save.status, 0, save.stdout + save.stderr);
+  assert.doesNotThrow(() => assertTokenExchange(readFileSync(saveLog, "utf8")));
   assert.deepEqual((({ site, site_source }) => ({ site, site_source }))(run("saved", ["report"])), {
     site: "sc-domain:saved.example",
     site_source: "saved_config",

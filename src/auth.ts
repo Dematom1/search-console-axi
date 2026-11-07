@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "./args.js";
-import { validateSite } from "./site.js";
+import { resolveSite, validateSite } from "./site.js";
 
 const SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"];
 const NO_ADC_MESSAGE = "Could not load the default credentials";
@@ -409,10 +409,13 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
     if (positionals.length !== 1) fail("usage: search-console-axi setup site <url>");
     const site = positionals[0] ?? fail("usage: search-console-axi setup site <url>");
     validateSite(site);
-    saveDefaultSite(site);
-    if (savedDefaultSite() !== site)
+    const auth = await getAuthClient();
+    const resolution = await resolveSite(auth, site);
+    if (resolution.kind === "unavailable") return fail("No verified Search Console sites visible");
+    saveDefaultSite(resolution.site);
+    if (savedDefaultSite() !== resolution.site)
       throw configError(new Error("saved site does not match requested value"), "verify saved");
-    return result({ site, status: "saved" });
+    return result({ site: resolution.site, status: "saved" });
   }
   if (action === "status") {
     if (positionals.length) fail("usage: search-console-axi setup status [--quota-project <project>]");
