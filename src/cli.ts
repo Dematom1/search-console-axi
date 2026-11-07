@@ -34,9 +34,10 @@ export async function runAxiCli(args = process.argv.slice(2)): Promise<void> {
   process.env.METADATA_SERVER_DETECTION ??= "none";
   try {
     if (args.includes("--help") || args.includes("-h")) {
-      process.stdout.write(
-        getCommandHelp(args.slice(0, args.indexOf(args.includes("--help") ? "--help" : "-h"))) + "\n",
-      );
+      const helpIndex = args.findIndex((arg) => arg === "--help" || arg === "-h");
+      const prefix = args.slice(0, helpIndex);
+      if (prefix.some((arg) => arg.startsWith("-") && arg !== "-")) usage("Help cannot follow command options");
+      process.stdout.write(getCommandHelp(prefix) + "\n");
       return;
     }
     if (args.length === 0) {

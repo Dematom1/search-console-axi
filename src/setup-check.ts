@@ -151,7 +151,7 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
         : savedSite
           ? "saved_config"
           : "first_verified";
-    if (!site)
+    if (!site || !reportable.some((entry) => entry.siteUrl === site))
       return encode({
         tool: "search-console-axi",
         sites: "No verified Search Console sites visible to this account - grant access as in step 4, or none exist.",
