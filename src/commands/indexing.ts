@@ -8,7 +8,7 @@ import { parseArgs } from "../args.js";
 
 const base = "https://indexing.googleapis.com";
 export const indexingScopes = ["https://www.googleapis.com/auth/indexing"];
-const help = `Indexing API: JobPosting or BroadcastEvent embedded in VideoObject pages only.
+const usageHelp = `Indexing API: JobPosting or BroadcastEvent embedded in VideoObject pages only.
 Service accounts must be Search Console property owners. Notifications do not guarantee indexing.
 Usage:
   search-console-axi indexing publish <url> --type updated|deleted [--confirm]
@@ -24,7 +24,7 @@ Examples:
   search-console-axi indexing batch urls.txt --type deleted --confirm
   search-console-axi indexing status https://example.com/jobs/1`;
 const invalid = (message: string): never => {
-  throw new AxiError(message, "VALIDATION_ERROR", [help]);
+  throw new AxiError(message, "VALIDATION_ERROR", [usageHelp]);
 };
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -435,25 +435,55 @@ async function quota(auth: AuthProvider): Promise<string> {
 
 export const name = "indexing";
 export const help = helpText(name, {
-    purpose:
-      "Indexing API: JobPosting or BroadcastEvent embedded in VideoObject pages only. Notifications do not guarantee indexing.",
-    flags: {
-      "--type <updated|deleted>": "Notification type",
-      "--confirm": "Submit previewed targets",
-      "--help": "Show this help",
-    },
-    examples: ["search-console-axi indexing publish https://example.com/jobs/1 --type updated"],
-    next: ["search-console-axi indexing quota"],
-  });
+  purpose:
+    "Indexing API: JobPosting or BroadcastEvent embedded in VideoObject pages only. Notifications do not guarantee indexing.",
+  flags: {
+    "--type <updated|deleted>": "Notification type",
+    "--confirm": "Submit previewed targets",
+    "--help": "Show this help",
+  },
+  examples: ["search-console-axi indexing publish https://example.com/jobs/1 --type updated"],
+  next: ["search-console-axi indexing quota"],
+});
 export const run = (args: string[]) => indexingCommand(args);
 export const command = {
   name,
   help,
   subcommands: {
-    publish: helpText("indexing publish", { purpose: "Preview or submit one URL notification.", flags: { "<url>": "Required HTTP(S) URL", "--type <updated|deleted>": "Required notification type", "--confirm": "Submit the previewed target", "--help": "Show this help" }, examples: ["search-console-axi indexing publish https://example.com/ --type updated"], next: ["search-console-axi indexing status <url>"] }),
-    status: helpText("indexing status", { purpose: "Read notification metadata for a URL.", flags: { "<url>": "Required HTTP(S) URL", "--help": "Show this help" }, examples: ["search-console-axi indexing status https://example.com/"], next: ["search-console-axi indexing publish <url> --type updated"] }),
-    batch: helpText("indexing batch", { purpose: "Preview or submit URL notifications from a file or stdin.", flags: { "<file|->": "Required input; '-' reads stdin", "--type <updated|deleted>": "Required notification type", "--confirm": "Submit the previewed targets", "--help": "Show this help" }, examples: ["search-console-axi indexing batch urls.txt --type deleted"], next: ["search-console-axi indexing status <url>"] }),
-    quota: helpText("indexing quota", { purpose: "Read Indexing API quota usage.", flags: { "--help": "Show this help" }, examples: ["search-console-axi indexing quota"], next: ["search-console-axi indexing status <url>"] }),
+    publish: helpText("indexing publish", {
+      purpose: "Preview or submit one URL notification.",
+      flags: {
+        "<url>": "Required HTTP(S) URL",
+        "--type <updated|deleted>": "Required notification type",
+        "--confirm": "Submit the previewed target",
+        "--help": "Show this help",
+      },
+      examples: ["search-console-axi indexing publish https://example.com/ --type updated"],
+      next: ["search-console-axi indexing status <url>"],
+    }),
+    status: helpText("indexing status", {
+      purpose: "Read notification metadata for a URL.",
+      flags: { "<url>": "Required HTTP(S) URL", "--help": "Show this help" },
+      examples: ["search-console-axi indexing status https://example.com/"],
+      next: ["search-console-axi indexing publish <url> --type updated"],
+    }),
+    batch: helpText("indexing batch", {
+      purpose: "Preview or submit URL notifications from a file or stdin.",
+      flags: {
+        "<file|->": "Required input; '-' reads stdin",
+        "--type <updated|deleted>": "Required notification type",
+        "--confirm": "Submit the previewed targets",
+        "--help": "Show this help",
+      },
+      examples: ["search-console-axi indexing batch urls.txt --type deleted"],
+      next: ["search-console-axi indexing status <url>"],
+    }),
+    quota: helpText("indexing quota", {
+      purpose: "Read Indexing API quota usage.",
+      flags: { "--help": "Show this help" },
+      examples: ["search-console-axi indexing quota"],
+      next: ["search-console-axi indexing status <url>"],
+    }),
   },
   run,
 };
