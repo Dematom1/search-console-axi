@@ -21,27 +21,13 @@ export function getCommandHelp(args: string[]): string {
       examples: ["search-console-axi", "search-console-axi report"],
       next: commands.map((command) => `search-console-axi ${command.name}`),
     });
-  if (args[0] === "setup" && args[1]) {
-    const actionHelp = {
-      check: { purpose: "Check credentials and Search Console access.", flags: { "--help": "Show this help" }, examples: ["search-console-axi setup check"], next: ["search-console-axi report"] },
-      status: { purpose: "Show configured credentials and setup status.", flags: { "--help": "Show this help" }, examples: ["search-console-axi setup status"], next: ["search-console-axi setup check"] },
-      site: { purpose: "Save the default Search Console property.", flags: { "<url>": "Required property URL", "--help": "Show this help" }, examples: ["search-console-axi setup site https://example.com/"], next: ["search-console-axi report"] },
-      "service-account": { purpose: "Configure a service-account key file.", flags: { "<key.json>": "Required service-account key file", "--quota-project <id>": "Set quota project", "--help": "Show this help" }, examples: ["search-console-axi setup service-account key.json"], next: ["search-console-axi setup check"] },
-      uninstall: { purpose: "Remove saved Search Console configuration.", flags: { "--help": "Show this help" }, examples: ["search-console-axi setup uninstall"], next: ["search-console-axi setup"] },
-    }[args[1] as "check" | "status" | "site" | "service-account" | "uninstall"];
-    if (actionHelp) return helpText(`setup ${args[1]}`, actionHelp);
-  }
-  if (args[0] === "indexing" && args[1]) {
-    const actionHelp = {
-      publish: { purpose: "Preview or submit one URL notification.", flags: { "<url>": "Required HTTP(S) URL", "--type <updated|deleted>": "Required notification type", "--confirm": "Submit the previewed target", "--help": "Show this help" }, examples: ["search-console-axi indexing publish https://example.com/ --type updated"], next: ["search-console-axi indexing status <url>"] },
-      status: { purpose: "Read notification metadata for a URL.", flags: { "<url>": "Required HTTP(S) URL", "--help": "Show this help" }, examples: ["search-console-axi indexing status https://example.com/"], next: ["search-console-axi indexing publish <url> --type updated"] },
-      batch: { purpose: "Preview or submit URL notifications from a file or stdin.", flags: { "<file|->": "Required input; '-' reads stdin", "--type <updated|deleted>": "Required notification type", "--confirm": "Submit the previewed targets", "--help": "Show this help" }, examples: ["search-console-axi indexing batch urls.txt --type deleted"], next: ["search-console-axi indexing status <url>"] },
-      quota: { purpose: "Read Indexing API quota usage.", flags: { "--help": "Show this help" }, examples: ["search-console-axi indexing quota"], next: ["search-console-axi indexing status <url>"] },
-    }[args[1] as "publish" | "status" | "batch" | "quota"];
-    if (actionHelp) return helpText(`indexing ${args[1]}`, actionHelp);
-  }
   const command = registry.get(args[0]!);
-  if (command) return command.help;
+  if (command) {
+    const action = args[1];
+    if (action && "subcommands" in command && action in command.subcommands)
+      return command.subcommands[action as keyof typeof command.subcommands];
+    return command.help;
+  }
   return getCommandHelp([]);
 }
 export async function runAxiCli(args = process.argv.slice(2)): Promise<void> {
