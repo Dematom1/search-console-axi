@@ -22,15 +22,15 @@ export async function run(args: string[] = []): Promise<string> {
   const parsed = parseArgs(args, ["--site", "--quota-project"]);
   if (parsed.positionals.length !== 1) usage("usage: search-console-axi inspect <url> [--site <site>]");
   const url = parsed.positionals[0]!;
+  let parsedUrl: URL;
   try {
-    const parsedUrl = new URL(url);
-    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:")
-      usage("inspect requires an absolute HTTP(S) URL");
-    if (parsedUrl.username || parsedUrl.password) usage("inspect URL must not contain credentials");
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("HTTP(S)")) throw error;
+    parsedUrl = new URL(url);
+  } catch {
     usage("inspect requires an absolute HTTP(S) URL");
   }
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:")
+    usage("inspect requires an absolute HTTP(S) URL");
+  if (parsedUrl.username || parsedUrl.password) usage("inspect URL must not contain credentials");
   const requestedSite = parsed.flags.get("--site");
   if (typeof requestedSite === "string") validateSite(requestedSite);
   const quotaProject = parsed.flags.get("--quota-project");

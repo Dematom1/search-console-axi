@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { decode } from "@toon-format/toon";
 import { assertTokenExchange } from "./harness/assert-token-log.mjs";
 
-const cli = new URL("../dist/bin/search-console-axi.js", import.meta.url).pathname;
-const preload = new URL("./harness/preload.mjs", import.meta.url).pathname;
-const scenario = new URL("./harness/scenarios/home.json", import.meta.url).pathname;
+const cli = fileURLToPath(new URL("../dist/bin/search-console-axi.js", import.meta.url));
+const preload = fileURLToPath(new URL("./harness/preload.mjs", import.meta.url));
+const scenario = fileURLToPath(new URL("./harness/scenarios/home.json", import.meta.url));
 const { privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { type: "pkcs8", format: "pem" },
@@ -55,4 +56,23 @@ test("standalone inspect resolves a site and rejects malformed URLs before auth"
   assert.equal(invalid.status, 2, invalid.stdout);
   assert.match(decode(invalid.stdout).error.message, /HTTP\(S\) URL/);
   assert.deepEqual(readFileSync(invalidLog, "utf8").trim().split("\n").map(JSON.parse), [{ max_concurrency: 0 }]);
+
+  const credentialLog = join(dir, "credentials.jsonl");
+  const credentialUrl = spawnSync(
+    process.execPath,
+    ["--import", preload, cli, "inspect", "https://user:secret@example.com/"],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        SEARCH_CONSOLE_AXI_SA_KEY: key,
+        FAKE_GSC_SCENARIO: scenario,
+        FAKE_LOG: credentialLog,
+        XDG_CONFIG_HOME: dir,
+      },
+    },
+  );
+  assert.equal(credentialUrl.status, 2, credentialUrl.stdout);
+  assert.match(decode(credentialUrl.stdout).error.message, /must not contain credentials/);
+  assert.deepEqual(readFileSync(credentialLog, "utf8").trim().split("\n").map(JSON.parse), [{ max_concurrency: 0 }]);
 });

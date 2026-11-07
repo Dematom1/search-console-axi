@@ -1,8 +1,7 @@
 import { savedDefaultSite } from "./auth.js";
 import type { AuthProvider } from "./auth.js";
 import { usage } from "./args.js";
-
-const sitesUrl = "https://searchconsole.googleapis.com/webmasters/v3/sites";
+import { sites } from "./setup-check.js";
 const verifiedPermissions = new Set(["siteOwner", "siteFullUser", "siteRestrictedUser"]);
 export function isValidSite(site: string): boolean {
   if (site.startsWith("sc-domain:") && site.length > "sc-domain:".length && !/\s/.test(site)) return true;
@@ -31,19 +30,7 @@ export function selectVerifiedSite(
 export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ site: string; site_source: string }> {
   const environment = process.env["SEARCH_CONSOLE_AXI_SITE"];
   const saved = savedDefaultSite();
-  const response = await auth.client.request<unknown>({ url: sitesUrl });
-  const data = response.data;
-  if (!data || typeof data !== "object" || !("siteEntry" in data) || !Array.isArray(data.siteEntry))
-    throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
-  const entries = data.siteEntry.filter((entry): entry is { siteUrl: string; permissionLevel?: string } =>
-    Boolean(
-      entry &&
-      typeof entry === "object" &&
-      "siteUrl" in entry &&
-      typeof entry.siteUrl === "string" &&
-      isValidSite(entry.siteUrl),
-    ),
-  );
+  const entries = await sites(auth);
   const verified = entries.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
   const candidates = [
     { site: flag, source: "flag" },
