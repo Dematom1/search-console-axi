@@ -43,6 +43,9 @@ test("every registered command and subcommand help route decodes without credent
       });
       assert.equal(result.status, 0, `${args} ${flag}: ${result.stdout} ${result.stderr}`);
       assert.doesNotThrow(() => decode(result.stdout));
+      const command = commands.find((item) => item.name === args[0]);
+      if (args.length === 2 && command && "subcommands" in command)
+        assert.equal(result.stdout.trim(), command.subcommands[args[1]]);
     }
 });
 

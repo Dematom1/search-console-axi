@@ -150,20 +150,6 @@ export function parseBatch(body: string, contentType: string, urls: string[]) {
 }
 
 export async function indexingCommand(args: string[], suppliedAuth?: AuthProvider): Promise<string> {
-  if (args.includes("--help") || args.includes("-h"))
-    return helpText("indexing", {
-      purpose: "Publish JobPosting or BroadcastEvent notifications or read Indexing API metadata.",
-      flags: {
-        "--type <updated|deleted>": "Notification type",
-        "--confirm": "Submit previewed targets",
-        "--help": "Show this help",
-      },
-      examples: [
-        "search-console-axi indexing publish https://example.com/jobs/1 --type updated",
-        "search-console-axi indexing quota",
-      ],
-      next: ["search-console-axi indexing status <url>"],
-    });
   const [action, ...rest] = args;
   if (!["publish", "status", "batch", "quota"].includes(action ?? ""))
     return invalid("Expected indexing publish, status, batch, or quota");
