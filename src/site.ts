@@ -12,6 +12,17 @@ export function validateSite(site: string): string {
   } catch {}
   return usage("site must be a sc-domain: property or absolute HTTP(S) URL without credentials");
 }
+export function selectVerifiedSite(
+  sites: string[],
+  candidates: { site: string | undefined; source: string }[],
+): { site: string; site_source: string } | undefined {
+  for (const candidate of candidates) {
+    if (candidate.site && sites.includes(candidate.site))
+      return { site: candidate.site, site_source: candidate.source };
+  }
+  const site = [...sites].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[0];
+  return site ? { site, site_source: "first_verified" } : undefined;
+}
 export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ site: string; site_source: string }> {
   const environment = process.env["SEARCH_CONSOLE_AXI_SITE"];
   const saved = savedDefaultSite();
@@ -23,9 +34,14 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ 
     Boolean(entry && typeof entry === "object" && "siteUrl" in entry && typeof entry.siteUrl === "string"),
   );
   const verified = entries.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
-  const requested = flag ?? environment ?? saved;
-  const site = requested ?? verified.map((entry) => entry.siteUrl).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[0];
-  if (!site || !verified.some((entry) => entry.siteUrl === site))
-    throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
-  return { site, site_source: flag ? "flag" : environment ? "environment" : saved ? "saved_config" : "first_verified" };
+  const selected = selectVerifiedSite(
+    verified.map((entry) => entry.siteUrl),
+    [
+      { site: flag, source: "flag" },
+      { site: environment, source: "environment" },
+      { site: saved, source: "saved_config" },
+    ],
+  );
+  if (!selected) throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
+  return selected;
 }
