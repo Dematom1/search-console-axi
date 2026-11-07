@@ -140,12 +140,6 @@ export async function runSetupCheck(auth: AuthProvider): Promise<string> {
 export async function runHome(auth: AuthProvider, siteOverride?: string, days = 7): Promise<string> {
   try {
     const accessible = await sites(auth);
-    if (!accessible.length)
-      return encode({
-        tool: "search-console-axi",
-        sites: "No Search Console sites visible to this account - grant access as in step 4, or none exist.",
-        help: ["Run search-console-axi setup for access instructions."],
-      });
     const reportable = accessible.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
     const candidates = [
       { site: siteOverride, source: "flag" },
@@ -155,6 +149,12 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
     const requested = candidates.find((candidate) => candidate.site);
     if (requested && !reportable.some((entry) => entry.siteUrl === requested.site))
       usage(`Selected site '${requested.site}' is not a verified property`);
+    if (!accessible.length)
+      return encode({
+        tool: "search-console-axi",
+        sites: "No Search Console sites visible to this account - grant access as in step 4, or none exist.",
+        help: ["Run search-console-axi setup for access instructions."],
+      });
     const selected = selectVerifiedSite(
       reportable.map((entry) => entry.siteUrl),
       candidates,
