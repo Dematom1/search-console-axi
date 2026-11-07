@@ -142,7 +142,7 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
     const reportable = accessible.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
     const environmentSite = process.env["SEARCH_CONSOLE_AXI_SITE"];
     const savedSite = savedDefaultSite();
-    const sorted = reportable.map((entry) => entry.siteUrl).sort((a, b) => a.localeCompare(b));
+    const sorted = reportable.map((entry) => entry.siteUrl).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     const site = siteOverride ?? environmentSite ?? savedSite ?? sorted[0];
     const siteSource = siteOverride
       ? "flag"
