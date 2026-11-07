@@ -410,7 +410,7 @@ async function quota(auth: AuthProvider): Promise<string> {
   } catch (error) {
     usageError = quotaFailure(error, "Cloud Monitoring");
   }
-  const counts = new Map<string, number>();
+  const counts = new Map<string, bigint>();
   for (const item of usage) counts.set(item.method, (counts.get(item.method) ?? 0n) + item.requests);
   const by_method = [...counts].map(([method, requests]) => ({ method, requests: requests.toString() }));
   return encode({
