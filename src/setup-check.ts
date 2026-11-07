@@ -161,7 +161,13 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
       });
     const { site, site_source } = selected;
     const range = searchDateRange();
-    const dateRange = days === 7 ? range : { ...range, startDate: new Date(Date.parse(range.endDate) - (days - 1) * 86_400_000).toISOString().slice(0, 10) };
+    const dateRange =
+      days === 7
+        ? range
+        : {
+            ...range,
+            startDate: new Date(Date.parse(range.endDate) - (days - 1) * 86_400_000).toISOString().slice(0, 10),
+          };
     const query = async (dimension: "query" | "page", orderBy: string) => {
       const result = await request(auth, `${API}/${encodeURIComponent(site)}/searchAnalytics/query`, "POST", {
         ...dateRange,

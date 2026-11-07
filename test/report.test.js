@@ -44,9 +44,7 @@ test("report resolves sites by flag, environment, saved config, then stable veri
   };
 
   assert.deepEqual(
-    (({ site, site_source }) => ({ site, site_source }))(
-      run("flag", ["report", "--site=sc-domain:flag.example"]),
-    ),
+    (({ site, site_source }) => ({ site, site_source }))(run("flag", ["report", "--site=sc-domain:flag.example"])),
     { site: "sc-domain:flag.example", site_source: "flag" },
   );
   assert.deepEqual(
@@ -55,17 +53,24 @@ test("report resolves sites by flag, environment, saved config, then stable veri
     ),
     { site: "sc-domain:env.example", site_source: "environment" },
   );
+  const saveLog = join(dir, "save.jsonl");
   const save = spawnSync(process.execPath, ["--import", preload, bin, "setup", "site", "sc-domain:saved.example"], {
     encoding: "utf8",
-    env: { ...process.env, XDG_CONFIG_HOME: dir },
+    env: {
+      ...process.env,
+      XDG_CONFIG_HOME: dir,
+      FAKE_GSC_SCENARIO: scenario,
+      FAKE_LOG: saveLog,
+    },
   });
   assert.equal(save.status, 0, save.stdout + save.stderr);
-  assert.deepEqual(
-    (({ site, site_source }) => ({ site, site_source }))(run("saved", ["report"])),
-    { site: "sc-domain:saved.example", site_source: "saved_config" },
-  );
-  assert.deepEqual(
-    (({ site, site_source }) => ({ site, site_source }))(run("first", ["report"])),
-    { site: "sc-domain:a.example", site_source: "first_verified" },
-  );
+  assert.deepEqual((({ site, site_source }) => ({ site, site_source }))(run("saved", ["report"])), {
+    site: "sc-domain:saved.example",
+    site_source: "saved_config",
+  });
+  rmSync(join(dir, "search-console-axi", "config.json"));
+  assert.deepEqual((({ site, site_source }) => ({ site, site_source }))(run("first", ["report"])), {
+    site: "sc-domain:a.example",
+    site_source: "first_verified",
+  });
 });
