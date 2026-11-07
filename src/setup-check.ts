@@ -5,6 +5,7 @@ import { searchDateRange } from "./period.js";
 export { setupGuide } from "./setup-guide.js";
 
 const API = "https://searchconsole.googleapis.com/webmasters/v3/sites";
+const verifiedPermissions = new Set(["siteOwner", "siteFullUser", "siteRestrictedUser"]);
 
 type Site = { siteUrl: string; permissionLevel?: string };
 
@@ -94,7 +95,7 @@ async function sites(auth: AuthProvider): Promise<Site[]> {
 export async function runSetupCheck(auth: AuthProvider): Promise<string> {
   try {
     const accessible = await sites(auth);
-    const reportable = accessible.filter((site) => site.permissionLevel !== "siteUnverifiedUser");
+    const reportable = accessible.filter((site) => verifiedPermissions.has(site.permissionLevel ?? ""));
     const missing = reportable.length
       ? []
       : ["No verified Search Console sites visible to this account - grant access as in step 4, or none exist."];
@@ -138,7 +139,7 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
         sites: "No Search Console sites visible to this account - grant access as in step 4, or none exist.",
         help: ["Run search-console-axi setup for access instructions."],
       });
-    const reportable = accessible.filter((entry) => entry.permissionLevel !== "siteUnverifiedUser");
+    const reportable = accessible.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
     const environmentSite = process.env["SEARCH_CONSOLE_AXI_SITE"];
     const savedSite = savedDefaultSite();
     const sorted = reportable.map((entry) => entry.siteUrl).sort((a, b) => a.localeCompare(b));
