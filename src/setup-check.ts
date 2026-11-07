@@ -219,7 +219,7 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
       site,
       site_source: siteSource,
       sites: reportable.length,
-      period: "last 7 complete days",
+      period: `last ${days} complete days`,
       totals: formatRows([summaryRows[0] ?? { clicks: 0, impressions: 0, ctr: 0, position: 0 }])[0],
       top_queries: formatRows(queries),
       top_pages: formatRows(pages),
