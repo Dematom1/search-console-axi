@@ -426,7 +426,7 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
     try {
       unlinkSync(configFile());
       const verified = readConfig();
-      if (verified.serviceAccountPath || verified.quotaProjectId)
+      if (verified.serviceAccountPath || verified.quotaProjectId || verified.defaultSite)
         throw configError(new Error("saved registration remains after removal"), "verify removal of");
       return result({ auth: { status: "removed", config: "removed" } });
     } catch (error) {

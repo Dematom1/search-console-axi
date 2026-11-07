@@ -82,7 +82,11 @@ test("report resolves sites by flag, environment, saved config, then stable veri
     site: "sc-domain:saved.example",
     site_source: "saved_config",
   });
-  rmSync(join(dir, "search-console-axi", "config.json"));
+  const uninstall = spawnSync(process.execPath, [bin, "setup", "uninstall"], {
+    encoding: "utf8",
+    env: { ...baseEnv, XDG_CONFIG_HOME: dir },
+  });
+  assert.equal(uninstall.status, 0, uninstall.stdout + uninstall.stderr);
   assert.deepEqual((({ site, site_source }) => ({ site, site_source }))(run("first", ["report"])), {
     site: "sc-domain:a.example",
     site_source: "first_verified",
