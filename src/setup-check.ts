@@ -129,7 +129,7 @@ export async function runSetupCheck(auth: AuthProvider): Promise<string> {
   }
 }
 
-export async function runHome(auth: AuthProvider, siteOverride?: string): Promise<string> {
+export async function runHome(auth: AuthProvider, siteOverride?: string, days = 7): Promise<string> {
   try {
     const accessible = await sites(auth);
     if (!accessible.length)
@@ -156,7 +156,8 @@ export async function runHome(auth: AuthProvider, siteOverride?: string): Promis
         sites: "No verified Search Console sites visible to this account - grant access as in step 4, or none exist.",
         help: ["Run search-console-axi setup for access instructions."],
       });
-    const dateRange = searchDateRange();
+    const range = searchDateRange();
+    const dateRange = days === 7 ? range : { ...range, startDate: new Date(Date.parse(range.endDate) - (days - 1) * 86_400_000).toISOString().slice(0, 10) };
     const query = async (dimension: "query" | "page", orderBy: string) => {
       const result = await request(auth, `${API}/${encodeURIComponent(site)}/searchAnalytics/query`, "POST", {
         ...dateRange,

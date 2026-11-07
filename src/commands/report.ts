@@ -16,6 +16,6 @@ export async function run(args: string[] = []): Promise<string> {
   if (days !== undefined && (typeof days !== "string" || !/^\d+$/.test(days) || Number(days) < 1 || Number(days) > 90))
     usage("--days must be between 1 and 90");
   const site = parsed.flags.get("--site");
-  return runHome(await getAuthClient(), typeof site === "string" ? site : undefined);
+  return runHome(await getAuthClient(), typeof site === "string" ? site : undefined, days === undefined ? 7 : Number(days));
 }
 export const command = { name: "report", help: helpText("report", help), run };
