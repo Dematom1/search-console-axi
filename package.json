@@ -30,13 +30,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "format:check": "prettier --check .",
-    "test": "npm run build && node --test test/cli.test.js",
+    "test": "npm run build && node --test \"test/**/*.test.js\"",
     "prepack": "npm run build"
   },
   "dependencies": {
     "@toon-format/toon": "2.3.1",
     "axi-sdk-js": "0.1.13",
-    "google-auth-library": "^11.3.2"
+    "google-auth-library": "11.3.2"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
