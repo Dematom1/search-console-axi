@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "./args.js";
+import { validateSite } from "./site.js";
 
 const SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"];
 const NO_ADC_MESSAGE = "Could not load the default credentials";
@@ -407,8 +408,7 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
   if (action === "site") {
     if (positionals.length !== 1) fail("usage: search-console-axi setup site <url>");
     const site = positionals[0] ?? fail("usage: search-console-axi setup site <url>");
-    if (!site.startsWith("sc-domain:") && !/^https?:\/\//.test(site))
-      fail("site must be a sc-domain: property or HTTP(S) URL");
+    validateSite(site);
     saveDefaultSite(site);
     if (savedDefaultSite() !== site)
       throw configError(new Error("saved site does not match requested value"), "verify saved");
