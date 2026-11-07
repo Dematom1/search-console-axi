@@ -8,7 +8,7 @@ Search Console users and agents who need a safe, compact CLI for inspecting site
 
 The tool supports Search Console performance, sitemaps, URL inspection, and Indexing API notifications for JobPosting and BroadcastEvent pages only.
 
-It runs on Linux and macOS. Authentication modes are service-account environment variables, `_FILE` and `_COMMAND` credential sources, `GOOGLE_APPLICATION_CREDENTIALS`, a saved service-account path, and user ADC.
+It runs on Linux and macOS. Implemented authentication sources are `SEARCH_CONSOLE_AXI_SA_KEY`, `GOOGLE_APPLICATION_CREDENTIALS` (including its lowercase alias), a saved service-account path, and user ADC. `_FILE` and `_COMMAND` credential sources are planned for SC-3.
 
 Indexing writes are preview-first and require `--confirm`. Each write names explicit per-URL targets. The CLI does not automatically retry writes and reports unknown outcomes so users can check `indexing status` before resubmitting.
 
