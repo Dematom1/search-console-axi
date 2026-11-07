@@ -3,7 +3,14 @@
     {
       "method": "GET",
       "path": "/sites",
-      "body": { "siteEntry": [{ "siteUrl": "sc-domain:example.com", "permissionLevel": "siteOwner" }] }
+      "body": { "siteEntry": [
+        { "siteUrl": "sc-domain:z.example", "permissionLevel": "siteOwner" },
+        { "siteUrl": "sc-domain:a.example", "permissionLevel": "siteRestrictedUser" },
+        { "siteUrl": "sc-domain:flag.example", "permissionLevel": "siteOwner" },
+        { "siteUrl": "sc-domain:env.example", "permissionLevel": "siteFullUser" },
+        { "siteUrl": "sc-domain:saved.example", "permissionLevel": "siteRestrictedUser" },
+        { "siteUrl": "sc-domain:unverified.example", "permissionLevel": "siteUnverifiedUser" }
+      ] }
     },
     { "method": "POST", "path": "/searchAnalytics/query", "body": { "rows": [] } },
     {
