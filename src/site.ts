@@ -1,8 +1,17 @@
 import { savedDefaultSite } from "./auth.js";
 import type { AuthProvider } from "./auth.js";
+import { usage } from "./args.js";
 
 const sitesUrl = "https://searchconsole.googleapis.com/webmasters/v3/sites";
 const verifiedPermissions = new Set(["siteOwner", "siteFullUser", "siteRestrictedUser"]);
+export function validateSite(site: string): string {
+  if (site.startsWith("sc-domain:") && site.length > "sc-domain:".length && !/\s/.test(site)) return site;
+  try {
+    const url = new URL(site);
+    if (["http:", "https:"].includes(url.protocol) && !url.username && !url.password) return site;
+  } catch {}
+  return usage("site must be a sc-domain: property or absolute HTTP(S) URL without credentials");
+}
 export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ site: string; site_source: string }> {
   const environment = process.env["SEARCH_CONSOLE_AXI_SITE"];
   const saved = savedDefaultSite();
