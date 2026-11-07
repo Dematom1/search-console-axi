@@ -20,6 +20,9 @@ test("site resolution prefers flag, then environment, then a stable first verifi
           siteEntry: [
             { siteUrl: "https://z.example/", permissionLevel: "siteOwner" },
             { siteUrl: "sc-domain:a.example", permissionLevel: "siteRestrictedUser" },
+            { siteUrl: "sc-domain:flag.example", permissionLevel: "siteOwner" },
+            { siteUrl: "sc-domain:env.example", permissionLevel: "siteFullUser" },
+            { siteUrl: "sc-domain:saved.example", permissionLevel: "siteRestrictedUser" },
             { siteUrl: "sc-domain:unverified.example", permissionLevel: "siteUnverifiedUser" },
           ],
         },
