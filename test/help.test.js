@@ -15,10 +15,13 @@ test("CLI version matches package metadata", () => {
 });
 
 test("every registered command and subcommand help route decodes without credentials or network", () => {
-  const cases = [[], ...commands.flatMap((command) => [
-    [command.name],
-    ...("subcommands" in command ? Object.keys(command.subcommands).map((action) => [command.name, action]) : []),
-  ])];
+  const cases = [
+    [],
+    ...commands.flatMap((command) => [
+      [command.name],
+      ...("subcommands" in command ? Object.keys(command.subcommands).map((action) => [command.name, action]) : []),
+    ]),
+  ];
   for (const args of cases) {
     const result = spawnSync(process.execPath, [bin.pathname, ...args, "--help"], {
       encoding: "utf8",
