@@ -405,6 +405,7 @@ export async function setupCommand(args: string[], providerOptions: ProviderOpti
   const positionals = parsed.positionals;
 
   if (action === "site") {
+    if (quotaProject !== undefined) fail("setup site does not accept --quota-project");
     if (positionals.length !== 1) fail("usage: search-console-axi setup site <url>");
     const site = positionals[0] ?? fail("usage: search-console-axi setup site <url>");
     validateSite(site);
