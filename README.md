@@ -24,11 +24,11 @@ For local key files, set `GOOGLE_APPLICATION_CREDENTIALS` or run `search-console
 
 Run `search-console-axi setup` to check credentials and accessible sites. `search-console-axi setup status` reports local credential configuration, not API access or token validity. It includes the credential type and available account email, never credential contents. `search-console-axi setup uninstall` removes only the CLI's local configuration. Registration, saved quota-project updates, and removal re-read the configuration before reporting success.
 
-Invalid setup arguments, malformed config, and malformed or unsupported credential data produce `VALIDATION_ERROR` with exit code 2. Config I/O failures produce `CONFIG_ERROR`; missing or unreadable credential-file paths produce `AUTH_CONFIG_ERROR`, both with exit code 1 and repair guidance. `setup status` instead reports invalid config or credentials as `auth.status: invalid` with exit code 0; config I/O failures remain errors. Missing credentials produce setup guidance with `auth.status: not configured` for `setup`, `setup check`, and `setup status`. The default command also reports credential status when credentials cannot be loaded.
+Invalid setup arguments, malformed config, and malformed or unsupported credential data produce `VALIDATION_ERROR` with exit code 2. Config I/O failures produce `CONFIG_ERROR`; missing or unreadable credential-file paths produce `AUTH_CONFIG_ERROR`, both with exit code 1 and repair guidance. `setup status` instead reports invalid config or credentials as `auth.status: invalid` with exit code 0; config I/O failures remain errors. Missing credentials produce setup guidance with `auth.status: not configured` for `setup`, `setup check`, and `setup status`.
 
 ## Read Search Console
 
-Run `search-console-axi` for the default site's last seven complete days of clicks, impressions, CTR, position, top queries and pages, and low-CTR opportunities. Use `search-console-axi inspect <url> --site <site-url>` to inspect indexing for a URL. Reporting and inspection do not modify Search Console data; setup may write or remove local configuration.
+Run `search-console-axi` for the default site's last seven complete days of clicks, impressions, CTR, position, top queries and pages, and low-CTR opportunities. Set a default site with `search-console-axi setup site <site-url>`. Reports resolve the site from `--site`, `SEARCH_CONSOLE_AXI_SITE`, the saved default, then the first verified site. Use `search-console-axi inspect <url>` to inspect indexing for a URL; `--site` is optional and uses the same resolution order. Reporting and inspection do not modify Search Console data; setup may write or remove local configuration.
 
 ## Send Indexing API notifications
 
