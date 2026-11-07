@@ -66,7 +66,8 @@ test("inspect help succeeds without loading credentials", (t) => {
     env: { ...process.env, XDG_CONFIG_HOME },
   });
   assert.equal(result.status, 0, result.stdout);
-  assert.match(result.stdout, /usage: search-console-axi inspect <url> --site <site>/);
+  assert.equal(decode(result.stdout).command, "inspect");
+  assert.equal(decode(result.stdout).flags["--site <site>"].includes("defaults"), true);
   assert.doesNotMatch(result.stdout, /VALIDATION_ERROR/);
 });
 
@@ -166,7 +167,7 @@ test("credential validation covers all sources and CLI consumers", (t) => {
         SEARCH_CONSOLE_AXI_SA_KEY: source === "env" ? content : undefined,
         GOOGLE_CLOUD_PROJECT: "fixture-project",
       };
-      for (const args of [["setup"], ["setup", "check"], ["setup", ...inspection], inspection]) {
+      for (const args of [["setup"], ["setup", "check"], inspection]) {
         const output = spawnSync(process.execPath, [cli.pathname, ...args], { encoding: "utf8", env });
         assert.equal(output.status, 2, `${source}: ${args}: ${output.stdout}`);
         assert.match(output.stdout, /VALIDATION_ERROR/);
@@ -527,7 +528,7 @@ test("setup rejects unsupported actions as validation errors with exit 2", (t) =
   });
   assert.equal(result.status, 2);
   assert.match(result.stdout, /VALIDATION_ERROR/);
-  assert.match(result.stdout, /valid actions are setup, check, status, service-account, inspect, uninstall/);
+  assert.match(result.stdout, /valid actions are setup, check, status, site, service-account, uninstall/);
 });
 
 test("missing credential files are typed actionable errors", (t) => {
@@ -542,13 +543,7 @@ test("missing credential files are typed actionable errors", (t) => {
       JSON.stringify(source === "configured" ? { serviceAccountPath: path } : {}),
     );
     const env = { ...process.env, GOOGLE_APPLICATION_CREDENTIALS: source === "explicit" ? path : undefined };
-    for (const args of [
-      ["setup"],
-      ["setup", "check"],
-      ["setup", ...inspect],
-      inspect,
-      ["setup", "service-account", path],
-    ]) {
+    for (const args of [["setup"], ["setup", "check"], inspect, ["setup", "service-account", path]]) {
       const result = spawnSync(process.execPath, [cli.pathname, ...args], { encoding: "utf8", env });
       assert.equal(result.status, 1, result.stdout);
       assert.match(result.stdout, /AUTH_CONFIG_ERROR/);
