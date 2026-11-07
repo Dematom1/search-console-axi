@@ -54,8 +54,5 @@ test("standalone inspect resolves a site and rejects malformed URLs before auth"
   });
   assert.equal(invalid.status, 2, invalid.stdout);
   assert.match(decode(invalid.stdout).error.message, /HTTP\(S\) URL/);
-  assert.deepEqual(
-    readFileSync(invalidLog, "utf8").trim().split("\n").map(JSON.parse),
-    [{ max_concurrency: 0 }],
-  );
+  assert.deepEqual(readFileSync(invalidLog, "utf8").trim().split("\n").map(JSON.parse), [{ max_concurrency: 0 }]);
 });
