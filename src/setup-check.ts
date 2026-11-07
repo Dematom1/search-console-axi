@@ -145,14 +145,20 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
         help: ["Run search-console-axi setup for access instructions."],
       });
     const reportable = accessible.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
-    const selected = selectVerifiedSite(
-      reportable.map((entry) => entry.siteUrl),
-      [
-        { site: siteOverride, source: "flag" },
-        { site: process.env["SEARCH_CONSOLE_AXI_SITE"], source: "environment" },
-        { site: savedDefaultSite(), source: "saved_config" },
-      ],
-    );
+    const candidates = [
+      { site: siteOverride, source: "flag" },
+      { site: process.env["SEARCH_CONSOLE_AXI_SITE"], source: "environment" },
+      { site: savedDefaultSite(), source: "saved_config" },
+    ];
+    const requested = candidates.find((candidate) => candidate.site);
+    if (requested && !reportable.some((entry) => entry.siteUrl === requested.site))
+      return encode({
+        tool: "search-console-axi",
+        status: "error",
+        error: `Selected site '${requested.site}' is not a verified property`,
+        help: ["Choose a verified property with --site or update the saved default site."],
+      });
+    const selected = selectVerifiedSite(reportable.map((entry) => entry.siteUrl), candidates);
     if (!selected)
       return encode({
         tool: "search-console-axi",
