@@ -5,9 +5,8 @@
 Google Search Console reporting, URL inspection, and preview-gated Indexing API notifications for agents. `search-console-axi` is an [AXI](https://github.com/kunchenguid/axi) CLI. Output uses compact [TOON](https://toonformat.dev/) format. Requires Node.js 22.12 or newer.
 
 ```sh
-npm install
-npm run build
-node dist/bin/search-console-axi.js --help
+npm i -g search-console-axi
+search-console-axi --help
 ```
 
 ## Authentication
@@ -21,19 +20,19 @@ The CLI validates credential JSON locally and authenticates through `google-auth
 3. Load its JSON key from your secret manager into `SEARCH_CONSOLE_AXI_SA_KEY`. Never commit the key.
 4. In Search Console, add the service-account email under **Settings > Users and permissions** with Restricted access.
 
-For local key files, set `GOOGLE_APPLICATION_CREDENTIALS` or run `node dist/bin/search-console-axi.js setup service-account <key.json>`. Credential precedence is `SEARCH_CONSOLE_AXI_SA_KEY`, `GOOGLE_APPLICATION_CREDENTIALS` (with `google_application_credentials` as a fallback alias), the saved path configured by `setup service-account`, then user ADC. Credential files must contain `authorized_user` or `service_account` JSON; service-account registration and `SEARCH_CONSOLE_AXI_SA_KEY` require `service_account` JSON. To switch from a saved key to ADC, run `node dist/bin/search-console-axi.js setup uninstall`; this also removes the CLI's saved quota-project setting. Set the ADC quota project with `gcloud auth application-default set-quota-project <project>` or use `GOOGLE_CLOUD_QUOTA_PROJECT`.
+For local key files, set `GOOGLE_APPLICATION_CREDENTIALS` or run `search-console-axi setup service-account <key.json>`. Credential precedence is `SEARCH_CONSOLE_AXI_SA_KEY`, `GOOGLE_APPLICATION_CREDENTIALS` (with `google_application_credentials` as a fallback alias), the saved path configured by `setup service-account`, then user ADC. Credential files must contain `authorized_user` or `service_account` JSON; service-account registration and `SEARCH_CONSOLE_AXI_SA_KEY` require `service_account` JSON. To switch from a saved key to ADC, run `search-console-axi setup uninstall`; this also removes the CLI's saved quota-project setting. Set the ADC quota project with `gcloud auth application-default set-quota-project <project>` or use `GOOGLE_CLOUD_QUOTA_PROJECT`.
 
-Run `node dist/bin/search-console-axi.js setup` to check credentials and accessible sites. `node dist/bin/search-console-axi.js setup status` reports local credential configuration, not API access or token validity. It includes the credential type and available account email, never credential contents. `node dist/bin/search-console-axi.js setup uninstall` removes only the CLI's local configuration. Registration, saved quota-project updates, and removal re-read the configuration before reporting success.
+Run `search-console-axi setup` to check credentials and accessible sites. `search-console-axi setup status` reports local credential configuration, not API access or token validity. It includes the credential type and available account email, never credential contents. `search-console-axi setup uninstall` removes only the CLI's local configuration. Registration, saved quota-project updates, and removal re-read the configuration before reporting success.
 
 Invalid setup arguments, malformed config, and malformed or unsupported credential data produce `VALIDATION_ERROR` with exit code 2. Config I/O failures produce `CONFIG_ERROR`; missing or unreadable credential-file paths produce `AUTH_CONFIG_ERROR`, both with exit code 1 and repair guidance. `setup status` instead reports invalid config or credentials as `auth.status: invalid` with exit code 0; config I/O failures remain errors. Missing credentials produce setup guidance with `auth.status: not configured` for `setup`, `setup check`, and `setup status`. The default command also reports credential status when credentials cannot be loaded.
 
 ## Read Search Console
 
-Run `node dist/bin/search-console-axi.js` for the default site's last seven complete days of clicks, impressions, CTR, position, top queries and pages, and low-CTR opportunities. Use `node dist/bin/search-console-axi.js inspect <url> --site <site-url>` to inspect indexing for a URL. Reporting and inspection do not modify Search Console data; setup may write or remove local configuration.
+Run `search-console-axi` for the default site's last seven complete days of clicks, impressions, CTR, position, top queries and pages, and low-CTR opportunities. Use `search-console-axi inspect <url> --site <site-url>` to inspect indexing for a URL. Reporting and inspection do not modify Search Console data; setup may write or remove local configuration.
 
 ## Send Indexing API notifications
 
-Google supports the [Indexing API](https://developers.google.com/search/apis/indexing-api/v3/using-api) only for pages with `JobPosting` or `BroadcastEvent` embedded in `VideoObject` structured data. DFJ job pages fit this scope. It is not a general-purpose indexing API. A successful submission acknowledges a notification, not a crawl or index guarantee.
+Google supports the [Indexing API](https://developers.google.com/search/apis/indexing-api/v3/using-api) only for pages with `JobPosting` or `BroadcastEvent` embedded in `VideoObject` structured data. Job-posting pages fit this scope. It is not a general-purpose indexing API. A successful submission acknowledges a notification, not a crawl or index guarantee.
 
 Enable the Indexing API in your Google Cloud project. The service account must be an **owner** of the Search Console property, not merely a Restricted or Full user. The same credential precedence and local configuration apply. Notification commands request `https://www.googleapis.com/auth/indexing`; reporting still requests only `webmasters.readonly`. For user ADC, reauthorize your own Desktop OAuth client with the indexing scope as well as the reporting scopes above. Existing refresh tokens cannot gain scopes automatically.
 

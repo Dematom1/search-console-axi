@@ -16,7 +16,15 @@
         ]
       }
     },
-    { "method": "POST", "path": "/searchAnalytics/query", "body": { "rows": [] } },
+    {
+      "method": "POST",
+      "path": "/searchAnalytics/query",
+      "body": {
+        "rows": [
+          { "keys": ["https://example.com/jobs/1"], "clicks": 4, "impressions": 500, "ctr": 0.008, "position": 3 }
+        ]
+      }
+    },
     {
       "method": "POST",
       "path": "/urlInspection/index:inspect",
