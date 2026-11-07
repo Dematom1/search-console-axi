@@ -17,7 +17,7 @@ jobs:
     name: Generated files must not be hand-edited
     runs-on: ubuntu-latest
     if: >-
-      !(github.event.pull_request.user.login == 'release-please[bot]' &&
+      !(github.event.pull_request.user.login == vars.RELEASE_APP_BOT_LOGIN &&
       github.event.pull_request.user.type == 'Bot' &&
       startsWith(github.event.pull_request.head.ref, 'release-please--') &&
       github.event.pull_request.head.repo.full_name == github.repository)
