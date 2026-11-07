@@ -158,7 +158,10 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
         error: `Selected site '${requested.site}' is not a verified property`,
         help: ["Choose a verified property with --site or update the saved default site."],
       });
-    const selected = selectVerifiedSite(reportable.map((entry) => entry.siteUrl), candidates);
+    const selected = selectVerifiedSite(
+      reportable.map((entry) => entry.siteUrl),
+      candidates,
+    );
     if (!selected)
       return encode({
         tool: "search-console-axi",

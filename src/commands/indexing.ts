@@ -425,7 +425,10 @@ async function quota(auth: AuthProvider): Promise<string> {
       status: usageError ?? (usage.length ? "observed" : "No time series returned; unknown, not zero"),
       ...(usageError || !usage.length
         ? {}
-        : { total_observed_requests: by_method.reduce((sum, item) => sum + BigInt(item.requests), 0n).toString(), by_method }),
+        : {
+            total_observed_requests: by_method.reduce((sum, item) => sum + BigInt(item.requests), 0n).toString(),
+            by_method,
+          }),
       note: "Observed completed API requests, including failures; not authoritative publish quota consumption. Metrics may lag up to 30 minutes",
     },
     documented_defaults,

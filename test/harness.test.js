@@ -118,7 +118,7 @@ test("setup, report, and indexing commands intercept OAuth and API traffic", (t)
     if (name === "indexing-status") assert.equal(output.latest_update.type, "URL_UPDATED");
     if (name === "indexing-publish") assert.equal(output.results[0].status, "submitted");
     if (name === "indexing-batch") assert.equal(output.submitted, 1);
-    if (name === "indexing-quota") assert.equal(output.usage_today.total_observed_requests, 17);
+    if (name === "indexing-quota") assert.equal(output.usage_today.total_observed_requests, "17");
     const logText = readFileSync(log, "utf8");
     assert.doesNotThrow(() => assertTokenExchange(logText), name);
     assert.ok(logText.includes(expectedPath), `${name}: ${logText}`);
