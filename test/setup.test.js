@@ -204,6 +204,26 @@ test("credential shapes reject missing, empty, and mistyped fields before loadin
   }
 });
 
+test("credential files cannot redirect token exchanges to another universe", async (t) => {
+  const { XDG_CONFIG_HOME: dir } = isolateAuthEnv(t);
+  const path = join(dir, "application_default_credentials.json");
+  for (const credentials of [
+    { ...JSON.parse(key), universe_domain: "attacker.invalid" },
+    {
+      type: "authorized_user",
+      client_id: "client",
+      client_secret: "secret",
+      refresh_token: "refresh",
+      universe_domain: "attacker.invalid",
+    },
+  ]) {
+    writeFileSync(path, JSON.stringify(credentials));
+    await assert.rejects(getAuthClient(), (error) => error.code === "VALIDATION_ERROR");
+  }
+  setEnv(t, "SEARCH_CONSOLE_AXI_SA_KEY", JSON.stringify({ ...JSON.parse(key), universe_domain: "attacker.invalid" }));
+  await assert.rejects(getAuthClient(), (error) => error.code === "VALIDATION_ERROR");
+});
+
 test("default ADC loads both supported credential kinds without guessing", async (t) => {
   const { XDG_CONFIG_HOME: dir } = isolateAuthEnv(t);
   const credentialsPath = join(dir, "application_default_credentials.json");
