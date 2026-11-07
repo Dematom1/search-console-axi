@@ -1,0 +1,15 @@
+{
+  "responses": [
+    {
+      "method": "GET",
+      "path": "/sites",
+      "body": { "siteEntry": [{ "siteUrl": "sc-domain:example.com", "permissionLevel": "siteOwner" }] }
+    },
+    { "method": "POST", "path": "/searchAnalytics/query", "body": { "rows": [] } },
+    {
+      "method": "POST",
+      "path": "/urlInspection/index:inspect",
+      "body": { "inspectionResult": { "indexStatusResult": { "verdict": "PASS" } } }
+    }
+  ]
+}
