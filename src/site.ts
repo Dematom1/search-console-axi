@@ -35,15 +35,14 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ 
   const data = response.data;
   if (!data || typeof data !== "object" || !("siteEntry" in data) || !Array.isArray(data.siteEntry))
     throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
-  const entries = data.siteEntry.filter(
-    (entry): entry is { siteUrl: string; permissionLevel?: string } =>
-      Boolean(
-        entry &&
-          typeof entry === "object" &&
-          "siteUrl" in entry &&
-          typeof entry.siteUrl === "string" &&
-          isValidSite(entry.siteUrl),
-      ),
+  const entries = data.siteEntry.filter((entry): entry is { siteUrl: string; permissionLevel?: string } =>
+    Boolean(
+      entry &&
+      typeof entry === "object" &&
+      "siteUrl" in entry &&
+      typeof entry.siteUrl === "string" &&
+      isValidSite(entry.siteUrl),
+    ),
   );
   const verified = entries.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
   const selected = selectVerifiedSite(
@@ -54,6 +53,7 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ 
       { site: saved, source: "saved_config" },
     ],
   );
-  if (!selected) throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
+  if (!selected)
+    throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
   return selected;
 }
