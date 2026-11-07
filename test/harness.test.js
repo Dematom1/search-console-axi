@@ -146,6 +146,61 @@ test("setup, report, and indexing commands intercept OAuth and API traffic", (t)
   }
 });
 
+test("report requests match selected site, date range, dimensions, ordering, and limits", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "gsc-report-contract-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { preload, scenario, bin } = paths();
+  const cases = [
+    { args: [], site: "sc-domain:a.example", startDate: "2026-10-31", endDate: "2026-11-06" },
+    {
+      args: ["--days", "3", "--site", "sc-domain:z.example"],
+      site: "sc-domain:z.example",
+      startDate: "2026-11-04",
+      endDate: "2026-11-06",
+    },
+  ];
+  for (const [index, item] of cases.entries()) {
+    const log = join(dir, `${index}.jsonl`);
+    const result = spawnSync(process.execPath, ["--import", preload, bin, "report", ...item.args], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        SEARCH_CONSOLE_AXI_SA_KEY: fakeKey(),
+        FAKE_GSC_SCENARIO: scenario,
+        FAKE_LOG: log,
+        FAKE_NOW: "2026-11-07T12:00:00Z",
+        XDG_CONFIG_HOME: dir,
+      },
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const requests = readFileSync(log, "utf8")
+      .trim()
+      .split("\n")
+      .map(JSON.parse)
+      .filter((request) => request.method === "POST" && request.url.includes("/searchAnalytics/query"));
+    const dateRange = { startDate: item.startDate, endDate: item.endDate };
+    const expectedBodies = [
+      dateRange,
+      { ...dateRange, dimensions: ["query"], rowLimit: 10, orderBy: [{ field: "clicks", direction: "descending" }] },
+      { ...dateRange, dimensions: ["page"], rowLimit: 10, orderBy: [{ field: "clicks", direction: "descending" }] },
+      {
+        ...dateRange,
+        dimensions: ["page"],
+        rowLimit: 1000,
+        orderBy: [{ field: "impressions", direction: "descending" }],
+      },
+    ];
+    assert.deepEqual(
+      requests,
+      expectedBodies.map((body) => ({
+        method: "POST",
+        url: `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(item.site)}/searchAnalytics/query`,
+        body: JSON.stringify(body),
+      })),
+    );
+  }
+});
+
 test("authorized-user ADC credentials exchange tokens through the fake transport", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "gsc-authorized-user-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
