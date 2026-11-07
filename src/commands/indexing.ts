@@ -433,9 +433,8 @@ async function quota(auth: AuthProvider): Promise<string> {
   });
 }
 
-export const command = {
-  name: "indexing",
-  help: helpText("indexing", {
+export const name = "indexing";
+export const help = helpText(name, {
     purpose:
       "Indexing API: JobPosting or BroadcastEvent embedded in VideoObject pages only. Notifications do not guarantee indexing.",
     flags: {
@@ -445,12 +444,16 @@ export const command = {
     },
     examples: ["search-console-axi indexing publish https://example.com/jobs/1 --type updated"],
     next: ["search-console-axi indexing quota"],
-  }),
+  });
+export const run = (args: string[]) => indexingCommand(args);
+export const command = {
+  name,
+  help,
   subcommands: {
     publish: helpText("indexing publish", { purpose: "Preview or submit one URL notification.", flags: { "<url>": "Required HTTP(S) URL", "--type <updated|deleted>": "Required notification type", "--confirm": "Submit the previewed target", "--help": "Show this help" }, examples: ["search-console-axi indexing publish https://example.com/ --type updated"], next: ["search-console-axi indexing status <url>"] }),
     status: helpText("indexing status", { purpose: "Read notification metadata for a URL.", flags: { "<url>": "Required HTTP(S) URL", "--help": "Show this help" }, examples: ["search-console-axi indexing status https://example.com/"], next: ["search-console-axi indexing publish <url> --type updated"] }),
     batch: helpText("indexing batch", { purpose: "Preview or submit URL notifications from a file or stdin.", flags: { "<file|->": "Required input; '-' reads stdin", "--type <updated|deleted>": "Required notification type", "--confirm": "Submit the previewed targets", "--help": "Show this help" }, examples: ["search-console-axi indexing batch urls.txt --type deleted"], next: ["search-console-axi indexing status <url>"] }),
     quota: helpText("indexing quota", { purpose: "Read Indexing API quota usage.", flags: { "--help": "Show this help" }, examples: ["search-console-axi indexing quota"], next: ["search-console-axi indexing status <url>"] }),
   },
-  run: (args: string[]) => indexingCommand(args),
+  run,
 };
