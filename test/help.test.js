@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { decode } from "@toon-format/toon";
+import { commands } from "../dist/src/cli.js";
 const bin = new URL("../dist/bin/search-console-axi.js", import.meta.url);
 test("CLI version matches package metadata", () => {
   const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
@@ -13,23 +14,11 @@ test("CLI version matches package metadata", () => {
   assert.equal(result.stdout.trim(), version);
 });
 
-test("every command and subcommand help route decodes without credentials or network", () => {
-  const cases = [
-    [],
-    ["setup"],
-    ["setup", "check"],
-    ["setup", "status"],
-    ["setup", "site"],
-    ["setup", "service-account"],
-    ["setup", "uninstall"],
-    ["report"],
-    ["inspect"],
-    ["indexing"],
-    ["indexing", "publish"],
-    ["indexing", "status"],
-    ["indexing", "batch"],
-    ["indexing", "quota"],
-  ];
+test("every registered command and subcommand help route decodes without credentials or network", () => {
+  const cases = [[], ...commands.flatMap((command) => [
+    [command.name],
+    ...("subcommands" in command ? Object.keys(command.subcommands).map((action) => [command.name, action]) : []),
+  ])];
   for (const args of cases) {
     const result = spawnSync(process.execPath, [bin.pathname, ...args, "--help"], {
       encoding: "utf8",

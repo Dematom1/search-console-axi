@@ -45,13 +45,17 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ 
     ),
   );
   const verified = entries.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
+  const candidates = [
+    { site: flag, source: "flag" },
+    { site: environment, source: "environment" },
+    { site: saved, source: "saved_config" },
+  ];
+  const requested = candidates.find((candidate) => candidate.site);
+  if (requested && !verified.some((entry) => entry.siteUrl === requested.site))
+    return usage(`Selected site '${requested.site}' is not a verified property`);
   const selected = selectVerifiedSite(
     verified.map((entry) => entry.siteUrl),
-    [
-      { site: flag, source: "flag" },
-      { site: environment, source: "environment" },
-      { site: saved, source: "saved_config" },
-    ],
+    candidates,
   );
   if (!selected)
     throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
