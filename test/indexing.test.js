@@ -208,7 +208,7 @@ test("quota follows pagination and reports observed values without guessing", (t
     output.limits.map((item) => item.effective_limit),
     ["800", "180"],
   );
-  assert.equal(output.usage_today.by_method[0].requests, 17);
+  assert.equal(output.usage_today.by_method[0].requests, "17");
   assert.equal(output.documented_defaults.publish_per_day, 200);
   const requests = readFileSync(log, "utf8");
   assert.doesNotThrow(() => assertTokenExchange(requests));
