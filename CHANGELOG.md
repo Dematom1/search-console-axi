@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/Dematom1/search-console-axi/compare/search-console-axi-v0.1.1...search-console-axi-v0.1.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* exempt release bot from generated-files guard ([#14](https://github.com/Dematom1/search-console-axi/issues/14)) ([baa55c2](https://github.com/Dematom1/search-console-axi/commit/baa55c2d5b5e4604dd532d41e9cd3a76a4aa3337))
+
 ## [0.1.1](https://github.com/Dematom1/search-console-axi/compare/search-console-axi-v0.1.0...search-console-axi-v0.1.1) (2026-11-04)
 
 
