@@ -71,6 +71,33 @@ test("fake subprocess intercepts the OAuth token exchange and all Search Console
   assert.match(readFileSync(inspectLog, "utf8"), /urlInspection\/index:inspect/);
 });
 
+test("setup, report, and indexing commands intercept OAuth and API traffic", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "gsc-command-harness-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { preload, scenario, bin } = paths();
+  for (const [name, args, expectedPath] of [
+    ["setup-check", ["setup", "check"], "/sites"],
+    ["report", ["report"], "/searchAnalytics/query"],
+    ["indexing-status", ["indexing", "status", "https://example.com/"], "/urlNotifications/metadata"],
+  ]) {
+    const log = join(dir, `${name}.jsonl`);
+    const result = spawnSync(process.execPath, ["--import", preload, bin, ...args], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        SEARCH_CONSOLE_AXI_SA_KEY: fakeKey(),
+        FAKE_GSC_SCENARIO: scenario,
+        FAKE_LOG: log,
+        XDG_CONFIG_HOME: dir,
+      },
+    });
+    assert.equal(result.status, 0, `${name}: ${result.stdout}${result.stderr}`);
+    const logText = readFileSync(log, "utf8");
+    assert.doesNotThrow(() => assertTokenExchange(logText), name);
+    assert.ok(logText.includes(expectedPath), `${name}: ${logText}`);
+  }
+});
+
 test("invalid CLI arguments fail before any fake request, including token exchange", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "gsc-invalid-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
