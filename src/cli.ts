@@ -26,7 +26,9 @@ export function getCommandHelp(args: string[]): string {
       check: { purpose: "Check credentials and Search Console access.", flags: { "--help": "Show this help" }, examples: ["search-console-axi setup check"], next: ["search-console-axi report"] },
       status: { purpose: "Show configured credentials and setup status.", flags: { "--help": "Show this help" }, examples: ["search-console-axi setup status"], next: ["search-console-axi setup check"] },
       site: { purpose: "Save the default Search Console property.", flags: { "<url>": "Required property URL", "--help": "Show this help" }, examples: ["search-console-axi setup site https://example.com/"], next: ["search-console-axi report"] },
-    }[args[1] as "check" | "status" | "site"];
+      "service-account": { purpose: "Configure a service-account key file.", flags: { "<key.json>": "Required service-account key file", "--quota-project <id>": "Set quota project", "--help": "Show this help" }, examples: ["search-console-axi setup service-account key.json"], next: ["search-console-axi setup check"] },
+      uninstall: { purpose: "Remove saved Search Console configuration.", flags: { "--help": "Show this help" }, examples: ["search-console-axi setup uninstall"], next: ["search-console-axi setup"] },
+    }[args[1] as "check" | "status" | "site" | "service-account" | "uninstall"];
     if (actionHelp) return helpText(`setup ${args[1]}`, actionHelp);
   }
   if (args[0] === "indexing" && args[1]) {
