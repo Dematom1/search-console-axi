@@ -22,6 +22,17 @@ const key = JSON.stringify({
   client_email: "fake@example.invalid",
   private_key: privateKey,
 });
+const baseEnv = { ...process.env };
+for (const name of [
+  "SEARCH_CONSOLE_AXI_SITE",
+  "SEARCH_CONSOLE_AXI_SA_KEY",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+  "google_application_credentials",
+  "CLOUDSDK_CONFIG",
+  "GOOGLE_CLOUD_QUOTA_PROJECT",
+  "HOME",
+])
+  delete baseEnv[name];
 
 test("standalone inspect resolves a site and rejects malformed URLs before auth", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "gsc-inspect-"));
@@ -30,11 +41,13 @@ test("standalone inspect resolves a site and rejects malformed URLs before auth"
   const inspected = spawnSync(process.execPath, ["--import", preload, cli, "inspect", "https://example.com/"], {
     encoding: "utf8",
     env: {
-      ...process.env,
+      ...baseEnv,
       SEARCH_CONSOLE_AXI_SA_KEY: key,
       FAKE_GSC_SCENARIO: scenario,
       FAKE_LOG: log,
+      HOME: dir,
       XDG_CONFIG_HOME: dir,
+      CLOUDSDK_CONFIG: join(dir, ".gcloud"),
     },
   });
   assert.equal(inspected.status, 0, inspected.stdout + inspected.stderr);
@@ -46,11 +59,13 @@ test("standalone inspect resolves a site and rejects malformed URLs before auth"
   const invalid = spawnSync(process.execPath, ["--import", preload, cli, "inspect", "file:///tmp/page"], {
     encoding: "utf8",
     env: {
-      ...process.env,
+      ...baseEnv,
       SEARCH_CONSOLE_AXI_SA_KEY: key,
       FAKE_GSC_SCENARIO: scenario,
       FAKE_LOG: invalidLog,
+      HOME: dir,
       XDG_CONFIG_HOME: dir,
+      CLOUDSDK_CONFIG: join(dir, ".gcloud"),
     },
   });
   assert.equal(invalid.status, 2, invalid.stdout);
@@ -64,11 +79,13 @@ test("standalone inspect resolves a site and rejects malformed URLs before auth"
     {
       encoding: "utf8",
       env: {
-        ...process.env,
+        ...baseEnv,
         SEARCH_CONSOLE_AXI_SA_KEY: key,
         FAKE_GSC_SCENARIO: scenario,
         FAKE_LOG: credentialLog,
+        HOME: dir,
         XDG_CONFIG_HOME: dir,
+        CLOUDSDK_CONFIG: join(dir, ".gcloud"),
       },
     },
   );

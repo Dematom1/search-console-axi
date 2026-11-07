@@ -16,7 +16,18 @@ test("CLI version matches package metadata", () => {
   assert.equal(result.stdout.trim(), version);
 });
 
-test("every registered command and subcommand help route decodes without credentials or network", () => {
+test("every registered command and subcommand help route decodes without credentials or network", (t) => {
+  const home = mkdtempSync(join(tmpdir(), "gsc-help-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: home, CLOUDSDK_CONFIG: join(home, ".gcloud") };
+  for (const name of [
+    "SEARCH_CONSOLE_AXI_SITE",
+    "SEARCH_CONSOLE_AXI_SA_KEY",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "google_application_credentials",
+    "GOOGLE_CLOUD_QUOTA_PROJECT",
+  ])
+    delete env[name];
   const cases = [
     [],
     ...commands.flatMap((command) => [
@@ -28,7 +39,7 @@ test("every registered command and subcommand help route decodes without credent
     for (const args of cases) {
       const result = spawnSync(process.execPath, [bin, ...args, flag], {
         encoding: "utf8",
-        env: { ...process.env, SEARCH_CONSOLE_AXI_SA_KEY: undefined },
+        env,
       });
       assert.equal(result.status, 0, `${args} ${flag}: ${result.stdout} ${result.stderr}`);
       assert.doesNotThrow(() => decode(result.stdout));
