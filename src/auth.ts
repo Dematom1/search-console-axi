@@ -170,9 +170,10 @@ function isCredentialFile(value: unknown): value is CredentialFile {
   if (!required) return false;
   return (
     required.every((field) => typeof value[field] === "string" && value[field].trim().length > 0) &&
-    ["private_key_id", "project_id", "quota_project_id", "universe_domain"].every(
+    ["private_key_id", "project_id", "quota_project_id"].every(
       (field) => !(field in value) || (typeof value[field] === "string" && value[field].trim().length > 0),
-    )
+    ) &&
+    (!("universe_domain" in value) || value.universe_domain === "googleapis.com")
   );
 }
 

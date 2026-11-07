@@ -2,7 +2,7 @@ import { encode } from "@toon-format/toon";
 import { savedDefaultSite, type AuthProvider } from "./auth.js";
 import { setupGuide } from "./setup-guide.js";
 import { searchDateRange } from "./period.js";
-import { selectVerifiedSite } from "./site.js";
+import { isValidSite, selectVerifiedSite } from "./site.js";
 export { setupGuide } from "./setup-guide.js";
 
 const API = "https://searchconsole.googleapis.com/webmasters/v3/sites";
@@ -80,7 +80,11 @@ async function sites(auth: AuthProvider): Promise<Site[]> {
   const data = await request(auth, API);
   if (!data || typeof data !== "object" || !("siteEntry" in data) || !Array.isArray(data.siteEntry)) return [];
   return data.siteEntry.flatMap((site) =>
-    site && typeof site === "object" && "siteUrl" in site && typeof site.siteUrl === "string"
+    site &&
+    typeof site === "object" &&
+    "siteUrl" in site &&
+    typeof site.siteUrl === "string" &&
+    isValidSite(site.siteUrl)
       ? [
           {
             siteUrl: site.siteUrl,

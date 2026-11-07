@@ -4,6 +4,8 @@
       "method": "GET",
       "path": "/sites",
       "body": { "siteEntry": [
+        { "siteUrl": "https://user:secret@evil.example/", "permissionLevel": "siteOwner" },
+        { "siteUrl": "", "permissionLevel": "siteOwner" },
         { "siteUrl": "sc-domain:z.example", "permissionLevel": "siteOwner" },
         { "siteUrl": "sc-domain:a.example", "permissionLevel": "siteRestrictedUser" },
         { "siteUrl": "sc-domain:flag.example", "permissionLevel": "siteOwner" },
