@@ -2,6 +2,7 @@ import { encode } from "@toon-format/toon";
 import { savedDefaultSite, type AuthProvider } from "./auth.js";
 import { setupGuide } from "./setup-guide.js";
 import { searchDateRange } from "./period.js";
+import { selectVerifiedSite } from "./site.js";
 export { setupGuide } from "./setup-guide.js";
 
 const API = "https://searchconsole.googleapis.com/webmasters/v3/sites";
@@ -140,23 +141,21 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
         help: ["Run search-console-axi setup for access instructions."],
       });
     const reportable = accessible.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
-    const environmentSite = process.env["SEARCH_CONSOLE_AXI_SITE"];
-    const savedSite = savedDefaultSite();
-    const sorted = reportable.map((entry) => entry.siteUrl).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-    const site = siteOverride ?? environmentSite ?? savedSite ?? sorted[0];
-    const siteSource = siteOverride
-      ? "flag"
-      : environmentSite
-        ? "environment"
-        : savedSite
-          ? "saved_config"
-          : "first_verified";
-    if (!site || !reportable.some((entry) => entry.siteUrl === site))
+    const selected = selectVerifiedSite(
+      reportable.map((entry) => entry.siteUrl),
+      [
+        { site: siteOverride, source: "flag" },
+        { site: process.env["SEARCH_CONSOLE_AXI_SITE"], source: "environment" },
+        { site: savedDefaultSite(), source: "saved_config" },
+      ],
+    );
+    if (!selected)
       return encode({
         tool: "search-console-axi",
         sites: "No verified Search Console sites visible to this account - grant access as in step 4, or none exist.",
         help: ["Run search-console-axi setup for access instructions."],
       });
+    const { site, site_source } = selected;
     const range = searchDateRange();
     const dateRange = days === 7 ? range : { ...range, startDate: new Date(Date.parse(range.endDate) - (days - 1) * 86_400_000).toISOString().slice(0, 10) };
     const query = async (dimension: "query" | "page", orderBy: string) => {
@@ -218,7 +217,7 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
     return encode({
       tool: "search-console-axi",
       site,
-      site_source: siteSource,
+      site_source,
       sites: reportable.length,
       period: `last ${days} complete days`,
       totals: formatRows([summaryRows[0] ?? { clicks: 0, impressions: 0, ctr: 0, position: 0 }])[0],
