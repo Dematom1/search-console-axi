@@ -1,4 +1,6 @@
 import { encode } from "@toon-format/toon";
+import { AxiError } from "axi-sdk-js";
+import { usage } from "./args.js";
 import { savedDefaultSite, type AuthProvider } from "./auth.js";
 import { setupGuide } from "./setup-guide.js";
 import { searchDateRange } from "./period.js";
@@ -152,12 +154,7 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
     ];
     const requested = candidates.find((candidate) => candidate.site);
     if (requested && !reportable.some((entry) => entry.siteUrl === requested.site))
-      return encode({
-        tool: "search-console-axi",
-        status: "error",
-        error: `Selected site '${requested.site}' is not a verified property`,
-        help: ["Choose a verified property with --site or update the saved default site."],
-      });
+      usage(`Selected site '${requested.site}' is not a verified property`);
     const selected = selectVerifiedSite(
       reportable.map((entry) => entry.siteUrl),
       candidates,
@@ -249,6 +246,7 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
       ],
     });
   } catch (error) {
+    if (error instanceof AxiError && error.code === "VALIDATION_ERROR") throw error;
     if (!(error instanceof Error && error.message === ACCESS_DENIED)) process.exitCode = 1;
     return encode({
       tool: "search-console-axi",
