@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { performance } from "node:perf_hooks";
 import { decode } from "@toon-format/toon";
 import { commands } from "../dist/src/cli.js";
 const bin = fileURLToPath(new URL("../dist/bin/search-console-axi.js", import.meta.url));
