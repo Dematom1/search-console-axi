@@ -132,6 +132,7 @@ test("invalid CLI arguments fail before any fake request, including token exchan
   const { preload, scenario, bin } = paths();
   const cases = [
     ["inspect", "--bogus"],
+    ["inspect", "file:///tmp/page"],
     ["report", "--site"],
     ["report", "--days=abc"],
     ["setup", "--quota-project", "--site", "x"],
