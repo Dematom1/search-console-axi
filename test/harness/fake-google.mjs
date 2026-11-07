@@ -22,6 +22,7 @@ globalThis.fetch = async (input, init = {}) => {
   active++;
   maximum = Math.max(maximum, active);
   try {
+    await new Promise((resolve) => setImmediate(resolve));
     const entry = scenario.responses?.find((item) => item.method === method && url.includes(item.path));
     if (target.hostname === "oauth2.googleapis.com")
       return Response.json(scenario.token ?? { access_token: "fake-token", expires_in: 3600, token_type: "Bearer" });

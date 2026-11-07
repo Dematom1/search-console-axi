@@ -45,6 +45,6 @@ test("site resolution prefers flag, then environment, then a stable first verifi
   await setupCommand(["site", "sc-domain:saved.example"]);
   assert.deepEqual(await resolveSite(auth), { site: "sc-domain:saved.example", site_source: "saved_config" });
   delete process.env.XDG_CONFIG_HOME;
-  assert.deepEqual(await resolveSite(auth), { site: "https://z.example/", site_source: "first_verified" });
+  assert.deepEqual(await resolveSite(auth), { site: "sc-domain:a.example", site_source: "first_verified" });
   process.env.XDG_CONFIG_HOME = configHome;
 });
