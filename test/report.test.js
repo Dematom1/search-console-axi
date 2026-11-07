@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { decode } from "@toon-format/toon";
 import { assertTokenExchange } from "./harness/assert-token-log.mjs";
 
@@ -16,9 +17,20 @@ const key = () => {
   });
   return JSON.stringify({ type: "service_account", client_email: "fake@example.invalid", private_key: privateKey });
 };
-const preload = new URL("./harness/preload.mjs", import.meta.url).pathname;
-const scenario = new URL("./harness/scenarios/home.json", import.meta.url).pathname;
-const bin = new URL("../dist/bin/search-console-axi.js", import.meta.url).pathname;
+const preload = fileURLToPath(new URL("./harness/preload.mjs", import.meta.url));
+const scenario = fileURLToPath(new URL("./harness/scenarios/home.json", import.meta.url));
+const bin = fileURLToPath(new URL("../dist/bin/search-console-axi.js", import.meta.url));
+const baseEnv = { ...process.env };
+for (const name of [
+  "SEARCH_CONSOLE_AXI_SITE",
+  "SEARCH_CONSOLE_AXI_SA_KEY",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+  "google_application_credentials",
+  "CLOUDSDK_CONFIG",
+  "GOOGLE_CLOUD_QUOTA_PROJECT",
+  "HOME",
+])
+  delete baseEnv[name];
 
 test("report resolves sites by flag, environment, saved config, then stable verified order", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "gsc-site-resolution-"));
@@ -28,7 +40,7 @@ test("report resolves sites by flag, environment, saved config, then stable veri
     const result = spawnSync(process.execPath, ["--import", preload, bin, ...args], {
       encoding: "utf8",
       env: {
-        ...process.env,
+        ...baseEnv,
         SEARCH_CONSOLE_AXI_SA_KEY: key(),
         FAKE_GSC_SCENARIO: scenario,
         FAKE_LOG: log,
@@ -57,7 +69,7 @@ test("report resolves sites by flag, environment, saved config, then stable veri
   const save = spawnSync(process.execPath, ["--import", preload, bin, "setup", "site", "sc-domain:saved.example"], {
     encoding: "utf8",
     env: {
-      ...process.env,
+      ...baseEnv,
       XDG_CONFIG_HOME: dir,
       FAKE_GSC_SCENARIO: scenario,
       FAKE_LOG: saveLog,

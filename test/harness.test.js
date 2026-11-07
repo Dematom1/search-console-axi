@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { decode } from "@toon-format/toon";
 import { parseArgs } from "../dist/src/args.js";
@@ -23,9 +24,9 @@ const fakeKey = (projectId) => {
   });
 };
 const paths = () => ({
-  preload: new URL("./harness/preload.mjs", import.meta.url).pathname,
-  scenario: new URL("./harness/scenarios/home.json", import.meta.url).pathname,
-  bin: new URL("../dist/bin/search-console-axi.js", import.meta.url).pathname,
+  preload: fileURLToPath(new URL("./harness/preload.mjs", import.meta.url)),
+  scenario: fileURLToPath(new URL("./harness/scenarios/home.json", import.meta.url)),
+  bin: fileURLToPath(new URL("../dist/bin/search-console-axi.js", import.meta.url)),
 });
 
 test("strict parser handles inline values, signed values, repeated flags, empty values and dash positional", () => {
@@ -291,8 +292,28 @@ test("Search Console command failures preserve empty-site, disabled-API, and acc
         status: 403,
         body: { error: { message: "API disabled", errors: [{ reason: "accessNotConfigured" }] } },
       },
-      status: 0,
+      status: 1,
       expected: "Enable Google Search Console API",
+    },
+    {
+      name: "disabled-inspect-sites",
+      args: ["inspect", "https://example.com/"],
+      response: {
+        status: 403,
+        body: {
+          error: {
+            message: "API disabled",
+            details: [
+              {
+                reason: "SERVICE_DISABLED",
+                metadata: { service: "searchconsole.googleapis.com", consumer: "projects/12345" },
+              },
+            ],
+          },
+        },
+      },
+      status: 1,
+      expected: "Enable searchconsole.googleapis.com in 12345",
     },
     {
       name: "disabled-inspect",

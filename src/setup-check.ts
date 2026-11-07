@@ -76,7 +76,7 @@ export async function request(auth: AuthProvider, url: string, method = "GET", d
   }
 }
 
-async function sites(auth: AuthProvider): Promise<Site[]> {
+export async function sites(auth: AuthProvider): Promise<Site[]> {
   const data = await request(auth, API);
   if (!data || typeof data !== "object" || !("siteEntry" in data) || !Array.isArray(data.siteEntry)) return [];
   return data.siteEntry.flatMap((site) =>
@@ -249,6 +249,7 @@ export async function runHome(auth: AuthProvider, siteOverride?: string, days = 
       ],
     });
   } catch (error) {
+    if (!(error instanceof Error && error.message === ACCESS_DENIED)) process.exitCode = 1;
     return encode({
       tool: "search-console-axi",
       status: "error",

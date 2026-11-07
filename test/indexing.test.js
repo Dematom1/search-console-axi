@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { decode } from "@toon-format/toon";
 import { parseArgs } from "../dist/src/args.js";
 import { assertTokenExchange } from "./harness/assert-token-log.mjs";
@@ -22,9 +23,9 @@ const keyFor = (projectId) =>
     private_key: privateKey,
     project_id: projectId,
   });
-const preload = new URL("./harness/preload.mjs", import.meta.url).pathname;
-const scenarioPath = new URL("./harness/scenarios/home.json", import.meta.url).pathname;
-const bin = new URL("../dist/bin/search-console-axi.js", import.meta.url).pathname;
+const preload = fileURLToPath(new URL("./harness/preload.mjs", import.meta.url));
+const scenarioPath = fileURLToPath(new URL("./harness/scenarios/home.json", import.meta.url));
+const bin = fileURLToPath(new URL("../dist/bin/search-console-axi.js", import.meta.url));
 const multipart = (statuses) => {
   const parts = Array.from({ length: statuses.length }, (_, index) => statuses.length - index - 1)
     .map(

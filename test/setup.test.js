@@ -5,10 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { decode } from "@toon-format/toon";
 import { parseBatch } from "../dist/src/commands/indexing.js";
 
-const cli = new URL("../dist/bin/search-console-axi.js", import.meta.url).pathname;
+const cli = fileURLToPath(new URL("../dist/bin/search-console-axi.js", import.meta.url));
 const { privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
   privateKeyEncoding: { type: "pkcs8", format: "pem" },
