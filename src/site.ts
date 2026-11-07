@@ -2,6 +2,7 @@ import { savedDefaultSite } from "./auth.js";
 import type { AuthProvider } from "./auth.js";
 
 const sitesUrl = "https://searchconsole.googleapis.com/webmasters/v3/sites";
+const verifiedPermissions = new Set(["siteOwner", "siteFullUser", "siteRestrictedUser"]);
 export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ site: string; site_source: string }> {
   if (flag) return { site: flag, site_source: "flag" };
   const environment = process.env["SEARCH_CONSOLE_AXI_SITE"];
@@ -15,7 +16,7 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ 
   const entries = data.siteEntry.filter((entry): entry is { siteUrl: string; permissionLevel?: string } =>
     Boolean(entry && typeof entry === "object" && "siteUrl" in entry && typeof entry.siteUrl === "string"),
   );
-  const verified = entries.filter((entry) => entry.permissionLevel !== "siteUnverifiedUser");
+  const verified = entries.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
   const site = verified.map((entry) => entry.siteUrl).sort((a, b) => a.localeCompare(b))[0];
   if (!site)
     throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
