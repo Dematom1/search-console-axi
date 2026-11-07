@@ -41,4 +41,5 @@ export async function run(args: string[] = []): Promise<string> {
       : { result, site, site_source };
   return encode(output);
 }
-export const command = { name: "inspect", help: helpText("inspect", help), run };
+export const name = "inspect";
+export const command = { name, help: helpText(name, help), run };
