@@ -2,6 +2,7 @@ import { getAuthClient } from "../auth.js";
 import { runHome } from "../google.js";
 import { parseArgs, usage } from "../args.js";
 import { helpText, type Help } from "../help.js";
+import { validateSite } from "../site.js";
 
 export const help: Help = {
   purpose: "Report Search Console performance for a property.",
@@ -16,6 +17,7 @@ export async function run(args: string[] = []): Promise<string> {
   if (days !== undefined && (typeof days !== "string" || !/^\d+$/.test(days) || Number(days) < 1 || Number(days) > 90))
     usage("--days must be between 1 and 90");
   const site = parsed.flags.get("--site");
+  if (typeof site === "string") validateSite(site);
   return runHome(await getAuthClient(), typeof site === "string" ? site : undefined, days === undefined ? 7 : Number(days));
 }
 export const name = "report";
