@@ -339,7 +339,7 @@ async function quota(auth: AuthProvider): Promise<string> {
   const now = new Date();
   const start = pacificMidnight(now);
   const limits: { metric: string; unit: string; effective_limit: string; dimensions: Record<string, unknown> }[] = [];
-  const usage: { method: string; requests: number }[] = [];
+  const usage: { method: string; requests: bigint }[] = [];
   let limitsError: string | undefined;
   let usageError: string | undefined;
   try {
@@ -397,12 +397,11 @@ async function quota(auth: AuthProvider): Promise<string> {
         const series = object(value);
         const labels = object(object(series.resource).labels);
         if (!Array.isArray(series.points) || !series.points.length) continue;
-        let requests = 0;
+        let requests = 0n;
         for (const point of series.points) {
           const count = object(object(point).value).int64Value;
-          if (typeof count !== "string" || !/^\d+$/.test(count) || !Number.isSafeInteger(Number(count)))
-            throw new Error("Invalid count");
-          requests += Number(count);
+          if (typeof count !== "string" || !/^\d+$/.test(count)) throw new Error("Invalid count");
+          requests += BigInt(count);
         }
         usage.push({ method: typeof labels.method === "string" ? labels.method : "unspecified", requests });
       }
@@ -412,8 +411,8 @@ async function quota(auth: AuthProvider): Promise<string> {
     usageError = quotaFailure(error, "Cloud Monitoring");
   }
   const counts = new Map<string, number>();
-  for (const item of usage) counts.set(item.method, (counts.get(item.method) ?? 0) + item.requests);
-  const by_method = [...counts].map(([method, requests]) => ({ method, requests }));
+  for (const item of usage) counts.set(item.method, (counts.get(item.method) ?? 0n) + item.requests);
+  const by_method = [...counts].map(([method, requests]) => ({ method, requests: requests.toString() }));
   return encode({
     project: projectId,
     project_source: auth.quotaProjectId ? "quota_project" : "credential_project",
@@ -426,7 +425,7 @@ async function quota(auth: AuthProvider): Promise<string> {
       status: usageError ?? (usage.length ? "observed" : "No time series returned; unknown, not zero"),
       ...(usageError || !usage.length
         ? {}
-        : { total_observed_requests: by_method.reduce((sum, item) => sum + item.requests, 0), by_method }),
+        : { total_observed_requests: by_method.reduce((sum, item) => sum + BigInt(item.requests), 0n).toString(), by_method }),
       note: "Observed completed API requests, including failures; not authoritative publish quota consumption. Metrics may lag up to 30 minutes",
     },
     documented_defaults,

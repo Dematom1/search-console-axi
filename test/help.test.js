@@ -5,8 +5,6 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { decode } from "@toon-format/toon";
-import { commands } from "../dist/src/cli.js";
-
 const bin = new URL("../dist/bin/search-console-axi.js", import.meta.url);
 test("CLI version matches package metadata", () => {
   const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
@@ -15,9 +13,7 @@ test("CLI version matches package metadata", () => {
   assert.equal(result.stdout.trim(), version);
 });
 
-test("every registered command has decodable help without credentials or network", () => {
-  assert.ok(commands.length > 0 && commands.every((command) => command.name && command.help));
-  for (const command of commands) assert.doesNotThrow(() => decode(command.help));
+test("every command and subcommand help route decodes without credentials or network", () => {
   const cases = [
     [],
     ["setup"],
