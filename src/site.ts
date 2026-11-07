@@ -4,12 +4,17 @@ import { usage } from "./args.js";
 
 const sitesUrl = "https://searchconsole.googleapis.com/webmasters/v3/sites";
 const verifiedPermissions = new Set(["siteOwner", "siteFullUser", "siteRestrictedUser"]);
-export function validateSite(site: string): string {
-  if (site.startsWith("sc-domain:") && site.length > "sc-domain:".length && !/\s/.test(site)) return site;
+export function isValidSite(site: string): boolean {
+  if (site.startsWith("sc-domain:") && site.length > "sc-domain:".length && !/\s/.test(site)) return true;
   try {
     const url = new URL(site);
-    if (["http:", "https:"].includes(url.protocol) && !url.username && !url.password) return site;
-  } catch {}
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+export function validateSite(site: string): string {
+  if (isValidSite(site)) return site;
   return usage("site must be a sc-domain: property or absolute HTTP(S) URL without credentials");
 }
 export function selectVerifiedSite(
@@ -30,8 +35,15 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<{ 
   const data = response.data;
   if (!data || typeof data !== "object" || !("siteEntry" in data) || !Array.isArray(data.siteEntry))
     throw new Error("No verified Search Console sites visible to this account - grant access or configure --site.");
-  const entries = data.siteEntry.filter((entry): entry is { siteUrl: string; permissionLevel?: string } =>
-    Boolean(entry && typeof entry === "object" && "siteUrl" in entry && typeof entry.siteUrl === "string"),
+  const entries = data.siteEntry.filter(
+    (entry): entry is { siteUrl: string; permissionLevel?: string } =>
+      Boolean(
+        entry &&
+          typeof entry === "object" &&
+          "siteUrl" in entry &&
+          typeof entry.siteUrl === "string" &&
+          isValidSite(entry.siteUrl),
+      ),
   );
   const verified = entries.filter((entry) => verifiedPermissions.has(entry.permissionLevel ?? ""));
   const selected = selectVerifiedSite(
