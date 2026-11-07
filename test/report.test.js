@@ -35,7 +35,7 @@ for (const name of [
 test("report resolves sites by flag, environment, saved config, then stable verified order", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "gsc-site-resolution-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const run = (name, args, extraEnv = {}) => {
+  const run = (name, args, extraEnv = {}, expectedStatus = 0) => {
     const log = join(dir, `${name}.jsonl`);
     const result = spawnSync(process.execPath, ["--import", preload, bin, ...args], {
       encoding: "utf8",
@@ -48,11 +48,11 @@ test("report resolves sites by flag, environment, saved config, then stable veri
         ...extraEnv,
       },
     });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.status, expectedStatus, result.stdout + result.stderr);
     const requests = readFileSync(log, "utf8");
     assert.doesNotThrow(() => assertTokenExchange(requests));
     assert.ok(requests.includes("/sites"));
-    return decode(result.stdout);
+    return result.status === 0 ? decode(result.stdout) : result.stdout + result.stderr;
   };
 
   assert.deepEqual(
@@ -85,4 +85,6 @@ test("report resolves sites by flag, environment, saved config, then stable veri
     site: "sc-domain:a.example",
     site_source: "first_verified",
   });
+  assert.equal(run("subdomain", ["report", "--site=https://www.a.example/"]).site, "sc-domain:a.example");
+  assert.match(run("domain-boundary", ["report", "--site=https://nota.example/"], {}, 2), /not a verified property/);
 });

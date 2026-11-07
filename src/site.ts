@@ -45,7 +45,11 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<Si
     if (candidate === property) return true;
     try {
       const url = new URL(candidate);
-      if (property === `sc-domain:${url.hostname}`) return true;
+      if (property.startsWith("sc-domain:")) {
+        const domain = property.slice("sc-domain:".length);
+        if (url.hostname === domain || url.hostname.endsWith(`.${domain}`)) return true;
+        return false;
+      }
       const verifiedUrl = new URL(property);
       return (
         verifiedUrl.origin === url.origin &&
