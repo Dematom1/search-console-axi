@@ -3,7 +3,7 @@ import { getAuthClient } from "../auth.js";
 import { inspectUrl } from "../google.js";
 import { parseArgs, usage } from "../args.js";
 import { helpText, type Help } from "../help.js";
-import { resolveSite } from "../site.js";
+import { resolveSite, validateSite } from "../site.js";
 
 export const help: Help = {
   purpose: "Inspect a URL's Google index status.",
@@ -26,13 +26,15 @@ export async function run(args: string[] = []): Promise<string> {
     const parsedUrl = new URL(url);
     if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:")
       usage("inspect requires an absolute HTTP(S) URL");
+    if (parsedUrl.username || parsedUrl.password) usage("inspect URL must not contain credentials");
   } catch (error) {
     if (error instanceof Error && error.message.includes("HTTP(S)")) throw error;
     usage("inspect requires an absolute HTTP(S) URL");
   }
+  const requestedSite = parsed.flags.get("--site");
+  if (typeof requestedSite === "string") validateSite(requestedSite);
   const quotaProject = parsed.flags.get("--quota-project");
   const auth = await getAuthClient({ quotaProject: typeof quotaProject === "string" ? quotaProject : undefined });
-  const requestedSite = parsed.flags.get("--site");
   const { site, site_source } = await resolveSite(auth, typeof requestedSite === "string" ? requestedSite : undefined);
   const result: unknown = decode(await inspectUrl(auth, url, site));
   const output =
