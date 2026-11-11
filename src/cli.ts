@@ -52,7 +52,7 @@ export async function runAxiCli(args = process.argv.slice(2)): Promise<void> {
       return;
     }
     const [name, ...rest] = args;
-    if (name === "--version") {
+    if (name === "--version" || name === "-v" || name === "-V") {
       const { readFileSync } = await import("node:fs");
       process.stdout.write(
         `${JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version}\n`,

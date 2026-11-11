@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -9,12 +9,12 @@ import { performance } from "node:perf_hooks";
 import { decode } from "@toon-format/toon";
 import { commands } from "../dist/src/cli.js";
 const bin = fileURLToPath(new URL("../dist/bin/search-console-axi.js", import.meta.url));
-test("CLI version matches package metadata", () => {
-  const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
-  const result = spawnSync(process.execPath, [bin, "--version"], { encoding: "utf8" });
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(result.stdout.trim(), version);
-});
+for (const flag of ["--version", "-v", "-V"])
+  test(`CLI ${flag} prints published version 0.1.2`, () => {
+    const result = spawnSync(process.execPath, [bin, flag], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.stdout, "0.1.2\n");
+  });
 
 test("every registered command and subcommand help route decodes without credentials or network", (t) => {
   const home = mkdtempSync(join(tmpdir(), "gsc-help-"));
