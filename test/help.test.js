@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -9,11 +9,12 @@ import { performance } from "node:perf_hooks";
 import { decode } from "@toon-format/toon";
 import { commands } from "../dist/src/cli.js";
 const bin = fileURLToPath(new URL("../dist/bin/search-console-axi.js", import.meta.url));
+const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 for (const flag of ["--version", "-v", "-V"])
-  test(`CLI ${flag} prints published version 0.1.2`, () => {
+  test(`CLI ${flag} prints published version ${version}`, () => {
     const result = spawnSync(process.execPath, [bin, flag], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.equal(result.stdout, "0.1.2\n");
+    assert.equal(result.stdout, `${version}\n`);
   });
 
 test("every registered command and subcommand help route decodes without credentials or network", (t) => {
