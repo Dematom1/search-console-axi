@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/Dematom1/search-console-axi/compare/search-console-axi-v0.1.2...search-console-axi-v0.1.3) (2026-11-11)
+
+
+### Bug Fixes
+
+* **cli:** accept short version flags ([#17](https://github.com/Dematom1/search-console-axi/issues/17)) ([d076753](https://github.com/Dematom1/search-console-axi/commit/d0767531e6dd02c15fab9dcf67f93e1b02a74d0d))
+
 ## [0.1.2](https://github.com/Dematom1/search-console-axi/compare/search-console-axi-v0.1.1...search-console-axi-v0.1.2) (2026-11-08)
 
 
