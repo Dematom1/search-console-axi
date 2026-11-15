@@ -21,17 +21,6 @@ search-console-axi --help
 
 Then configure credentials as described in [Authentication](#authentication).
 
-## Dematom1 platform AXIs
-
-| tool                                                                 | install                                                                    |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [terraform-axi](https://github.com/Dematom1/terraform-axi)           | `npx skills add Dematom1/terraform-axi --skill terraform-axi -g`           |
-| [argocd-axi](https://github.com/Dematom1/argocd-axi)                 | `npx skills add Dematom1/argocd-axi --skill argocd-axi -g`                 |
-| [datadog-axi](https://github.com/Dematom1/datadog-axi)               | `npx skills add Dematom1/datadog-axi --skill datadog-axi -g`               |
-| [argo-workflows-axi](https://github.com/Dematom1/argo-workflows-axi) | `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi -g` |
-| [search-console-axi](https://github.com/Dematom1/search-console-axi) | `npx skills add Dematom1/search-console-axi --skill search-console-axi -g` |
-| [k8s-axi](https://github.com/Dematom1/k8s-axi)                       | `npx skills add Dematom1/k8s-axi --skill k8s-axi -g`                       |
-
 ## Authentication
 
 The CLI validates credential JSON locally and authenticates through `google-auth-library`. It never stores or prints OAuth tokens or service-account keys. For personal access, create your own Desktop OAuth client and configure ADC with `gcloud auth application-default login --client-id-file=client.json --scopes=https://www.googleapis.com/auth/webmasters.readonly,https://www.googleapis.com/auth/cloud-platform`. Google's built-in `gcloud` OAuth client cannot grant the Search Console scope.
