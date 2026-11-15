@@ -8,7 +8,9 @@ Google Search Console reporting, URL inspection, and preview-gated Indexing API 
 npx skills add Dematom1/search-console-axi --skill search-console-axi -g
 ```
 
-Zero setup: tell your agent "Execute `npx -y search-console-axi` to read Google Search Console clicks, impressions, top queries and URL indexing status."
+No install needed: tell your agent "Execute `npx -y search-console-axi` to read Google Search Console clicks, impressions, top queries and URL indexing status."
+
+Either way, Google credentials are required first: see [Authentication](#authentication).
 
 ### Optional
 
@@ -18,8 +20,6 @@ Install the CLI globally:
 npm i -g search-console-axi
 search-console-axi --help
 ```
-
-Then configure credentials as described in [Authentication](#authentication).
 
 ## Authentication
 
