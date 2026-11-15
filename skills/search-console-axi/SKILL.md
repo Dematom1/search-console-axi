@@ -1,6 +1,6 @@
 ---
 name: search-console-axi
-description: Read Google Search Console performance, inspect URL indexing, or submit job-page Indexing API notifications.
+description: See which Google Search Console queries and pages drive clicks, find low-CTR opportunities, check whether a URL is indexed, and safely notify Google about job-posting pages (preview before submit).
 ---
 
 # search-console-axi

@@ -5,9 +5,32 @@
 Google Search Console reporting, URL inspection, and preview-gated Indexing API notifications for agents. `search-console-axi` is an [AXI](https://github.com/kunchenguid/axi) CLI. Output uses compact [TOON](https://toonformat.dev/) format. Requires Node.js 22.12 or newer.
 
 ```sh
+npx skills add Dematom1/search-console-axi --skill search-console-axi -g
+```
+
+Zero setup: tell your agent "Execute `npx -y search-console-axi` to read Google Search Console clicks, impressions, top queries and URL indexing status."
+
+### Optional
+
+Install the CLI globally:
+
+```sh
 npm i -g search-console-axi
 search-console-axi --help
 ```
+
+Then configure credentials as described in [Authentication](#authentication).
+
+## Dematom1 platform AXIs
+
+| tool                                                                 | install                                                                    |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [terraform-axi](https://github.com/Dematom1/terraform-axi)           | `npx skills add Dematom1/terraform-axi --skill terraform-axi -g`           |
+| [argocd-axi](https://github.com/Dematom1/argocd-axi)                 | `npx skills add Dematom1/argocd-axi --skill argocd-axi -g`                 |
+| [datadog-axi](https://github.com/Dematom1/datadog-axi)               | `npx skills add Dematom1/datadog-axi --skill datadog-axi -g`               |
+| [argo-workflows-axi](https://github.com/Dematom1/argo-workflows-axi) | `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi -g` |
+| [search-console-axi](https://github.com/Dematom1/search-console-axi) | `npx skills add Dematom1/search-console-axi --skill search-console-axi -g` |
+| [k8s-axi](https://github.com/Dematom1/k8s-axi)                       | `npx skills add Dematom1/k8s-axi --skill k8s-axi -g`                       |
 
 ## Authentication
 
