@@ -5,6 +5,18 @@
 Google Search Console reporting, URL inspection, and preview-gated Indexing API notifications for agents. `search-console-axi` is an [AXI](https://github.com/kunchenguid/axi) CLI. Output uses compact [TOON](https://toonformat.dev/) format. Requires Node.js 22.12 or newer.
 
 ```sh
+npx skills add Dematom1/search-console-axi --skill search-console-axi -g
+```
+
+No install needed: tell your agent "Execute `npx -y search-console-axi` to read Google Search Console clicks, impressions, top queries and URL indexing status."
+
+Either way, Google credentials are required first: see [Authentication](#authentication).
+
+### Optional
+
+Install the CLI globally:
+
+```sh
 npm i -g search-console-axi
 search-console-axi --help
 ```
@@ -20,11 +32,11 @@ The CLI validates credential JSON locally and authenticates through `google-auth
 3. Load its JSON key from your secret manager into `SEARCH_CONSOLE_AXI_SA_KEY`. Never commit the key.
 4. In Search Console, add the service-account email under **Settings > Users and permissions** with Restricted access.
 
-For local key files, set `GOOGLE_APPLICATION_CREDENTIALS` or run `search-console-axi setup service-account <key.json>`. Credential precedence is `SEARCH_CONSOLE_AXI_SA_KEY`, `GOOGLE_APPLICATION_CREDENTIALS` (with `google_application_credentials` as a fallback alias), the saved path configured by `setup service-account`, then user ADC. Credential files must contain `authorized_user` or `service_account` JSON; service-account registration and `SEARCH_CONSOLE_AXI_SA_KEY` require `service_account` JSON. To switch from a saved key to ADC, run `search-console-axi setup uninstall`; this also removes the CLI's saved quota-project setting. Set the ADC quota project with `gcloud auth application-default set-quota-project <project>` or use `GOOGLE_CLOUD_QUOTA_PROJECT`.
+For local key files, set `GOOGLE_APPLICATION_CREDENTIALS` or run `search-console-axi setup service-account <key.json>`. Credential precedence is `SEARCH_CONSOLE_AXI_SA_KEY`, `GOOGLE_APPLICATION_CREDENTIALS` (with `google_application_credentials` as a fallback alias), the saved path configured by `search-console-axi setup service-account`, then user ADC. Credential files must contain `authorized_user` or `service_account` JSON; service-account registration and `SEARCH_CONSOLE_AXI_SA_KEY` require `service_account` JSON. To switch from a saved key to ADC, run `search-console-axi setup uninstall`; this also removes the CLI's saved quota-project setting. Set the ADC quota project with `gcloud auth application-default set-quota-project <project>` or use `GOOGLE_CLOUD_QUOTA_PROJECT`.
 
 Run `search-console-axi setup` to check credentials and accessible sites. `search-console-axi setup status` reports local credential configuration, not API access or token validity. It includes the credential type and available account email, never credential contents. `search-console-axi setup uninstall` removes only the CLI's local configuration. Registration, saved quota-project updates, and removal re-read the configuration before reporting success.
 
-Invalid setup arguments, malformed config, and malformed or unsupported credential data produce `VALIDATION_ERROR` with exit code 2. Config I/O failures produce `CONFIG_ERROR`; missing or unreadable credential-file paths produce `AUTH_CONFIG_ERROR`, both with exit code 1 and repair guidance. `setup status` instead reports invalid config or credentials as `auth.status: invalid` with exit code 0; config I/O failures remain errors. Missing credentials produce setup guidance with `auth.status: not configured` for `setup`, `setup check`, and `setup status`.
+Invalid setup arguments, malformed config, and malformed or unsupported credential data produce `VALIDATION_ERROR` with exit code 2. Config I/O failures produce `CONFIG_ERROR`; missing or unreadable credential-file paths produce `AUTH_CONFIG_ERROR`, both with exit code 1 and repair guidance. `search-console-axi setup status` instead reports invalid config or credentials as `auth.status: invalid` with exit code 0; config I/O failures remain errors. Missing credentials produce setup guidance with `auth.status: not configured` for `search-console-axi setup`, `search-console-axi setup check`, and `search-console-axi setup status`.
 
 ## Read Search Console
 
@@ -48,13 +60,13 @@ search-console-axi indexing quota
 
 `publish` and `batch` are local previews until `--confirm`. Previews list every explicit URL target, the notification count, and the HTTP request count without loading credentials or calling Google. Batch input contains one absolute HTTP or HTTPS URL per line; blank lines are ignored. Duplicate URLs remain separate requests. URLs with embedded credentials, fragments, or whitespace are rejected. All input is validated before any submission. Each multipart batch contains at most 100 notifications, and each notification consumes quota separately.
 
-Before `--type deleted`, the page must return HTTP 404 or 410 or contain a `noindex` directive. `status` reads `urlNotifications.getMetadata`: the last notification times, not the page's indexing status. Use `inspect` for index status.
+Before `--type deleted`, the page must return HTTP 404 or 410 or contain a `noindex` directive. `status` reads `urlNotifications.getMetadata`: the last notification times, not the page's indexing status. Use `search-console-axi inspect` for index status.
 
 Confirmed batches report every URL as `submitted`, `failed`, or `unknown`, with an HTTP status where available. Any failed or unknown result sets exit code 1. Authentication, API, and transport errors omit raw server messages and credential contents. A 403 explains the owner, API enablement, and scope requirements; a 429 explains quota exhaustion. Requests are not automatically retried. An unknown outcome may already have reached Google; check notification status before retrying. Successful URLs in a partially failed batch must not be resubmitted blindly.
 
 ### Read project quota
 
-The Indexing API has no usage endpoint. `indexing quota` reads effective limits from Service Usage and today's observed request counts from Cloud Monitoring. The selected project is the configured quota project sent with requests, or the credential's `project_id` if no override exists. The output identifies that project and the source. User ADC without either project requires `setup --quota-project <project>`.
+The Indexing API has no usage endpoint. `search-console-axi indexing quota` reads effective limits from Service Usage and today's observed request counts from Cloud Monitoring. The selected project is the configured quota project sent with requests, or the credential's `project_id` if no override exists. The output identifies that project and the source. User ADC without either project requires `search-console-axi setup --quota-project <project>`.
 
 Quota reads request `cloud-platform.read-only` and `monitoring.read` OAuth scopes. User ADC with `cloud-platform` also supports both endpoints. Limits require `serviceusage.quotas.get`; usage requires `monitoring.timeSeries.list` on the selected project. These optional IAM permissions are separate from Search Console ownership. The Service Usage and Cloud Monitoring APIs must be enabled.
 
