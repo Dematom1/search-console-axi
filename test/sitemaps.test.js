@@ -133,6 +133,39 @@ test("sitemaps list and get retain API columns and exact counts", (t) => {
     contents: [...entry.contents.slice(0, 1), { ...entry.contents[1], indexed: null }],
   });
 });
+test("URL-prefix submit and recovery reads retain the exact property in either verified order", (t) => {
+  const prefix = "https://example.com/";
+  const prefixEndpoint = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(prefix)}/sitemaps`;
+  for (const properties of [
+    [site, prefix],
+    [prefix, site],
+  ]) {
+    const responses = [
+      {
+        method: "GET",
+        path: "/webmasters/v3/sites",
+        body: { siteEntry: properties.map((siteUrl) => ({ siteUrl, permissionLevel: "siteOwner" })) },
+      },
+      { method: "PUT", path: `${prefixEndpoint}/${encodeURIComponent(path)}`, body: {} },
+      { method: "GET", path: `${prefixEndpoint}/${encodeURIComponent(path)}`, body: entry },
+      { method: "GET", path: prefixEndpoint, body: { sitemap: [entry] } },
+    ];
+    const submitted = run(t, ["submit", path, "--site", prefix, "--confirm"], responses);
+    assert.equal(submitted.status, 0, submitted.stdout);
+    assert.equal(submitted.output.site, prefix);
+    for (const args of [["get", path, "--site", prefix], ["list", "--site", prefix], ["list"]]) {
+      const read = run(t, args, responses);
+      assert.equal(read.status, 0, read.stdout);
+      assert.equal(read.output.site, prefix);
+      const requests = read.requests.filter((request) => request.url.includes("/sitemaps"));
+      assert.equal(requests.length, 1);
+      assert.equal(
+        requests[0].url,
+        args[0] === "get" ? `${prefixEndpoint}/${encodeURIComponent(path)}` : prefixEndpoint,
+      );
+    }
+  }
+});
 test("list follows page tokens and rejects malformed successful responses", (t) => {
   const result = run(
     t,

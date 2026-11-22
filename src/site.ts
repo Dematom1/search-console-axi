@@ -64,7 +64,10 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<Si
   };
   if (requested && !verified.some((entry) => matches(requested.site!, entry.siteUrl)))
     return usage(`Selected site '${requested.site}' is not a verified property`);
-  const selectedCandidate = requested && verified.find((entry) => matches(requested.site!, entry.siteUrl));
+  const selectedCandidate =
+    requested &&
+    (verified.find((entry) => entry.siteUrl === requested.site) ??
+      verified.find((entry) => matches(requested.site!, entry.siteUrl)));
   const selected = selectedCandidate
     ? { site: selectedCandidate.siteUrl, site_source: requested.source }
     : selectVerifiedSite(
