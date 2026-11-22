@@ -60,8 +60,21 @@ export async function readUrls(source: { sitemap: string } | { file: string }): 
     try {
       const response = await fetch(sitemap, { signal: AbortSignal.timeout(30_000) });
       if (!response.ok) throw new Error();
-      const bytes = Buffer.from(await response.arrayBuffer());
-      if (bytes.length > 52_428_800) throw new Error();
+      if (!response.body) throw new Error();
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > 52_428_800) {
+          await reader.cancel();
+          throw new Error();
+        }
+        chunks.push(value);
+      }
+      const bytes = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), size);
       xml = (
         bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes, { maxOutputLength: 52_428_800 }) : bytes
       ).toString("utf8");

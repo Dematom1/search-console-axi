@@ -247,8 +247,12 @@ test("sitemap index expands children, XML entities and namespaces, deduplicates 
       "/empty": "<urlset/>",
       "/bad": "<urlset><url></urlset>",
       "/dtd": '<!DOCTYPE x [<!ENTITY foo "bar">]><urlset/>',
+      "/oversized": "oversized",
     };
-    res.end(docs[req.url] ?? "bad");
+    if (req.url === "/oversized") {
+      res.write(Buffer.alloc(52_428_801));
+      res.end();
+    } else res.end(docs[req.url] ?? "bad");
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -260,6 +264,7 @@ test("sitemap index expands children, XML entities and namespaces, deduplicates 
   assert.deepEqual(await readUrls({ sitemap: base + "/empty" }), []);
   await assert.rejects(readUrls({ sitemap: base + "/bad" }), /Invalid sitemap XML/);
   await assert.rejects(readUrls({ sitemap: base + "/dtd" }), /Invalid sitemap XML/);
+  await assert.rejects(readUrls({ sitemap: base + "/oversized" }), /Cannot fetch sitemap/);
   const file = join(dir, "urls.txt");
   await writeFile(file, "\r\nhttps://example.com/a\r\nhttps://example.com/a\n https://example.com/b \n");
   assert.deepEqual(await readUrls({ file }), ["https://example.com/a", "https://example.com/b"]);
