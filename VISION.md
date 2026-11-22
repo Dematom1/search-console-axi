@@ -6,7 +6,7 @@ Search Console users and agents who need a safe, compact CLI for inspecting site
 
 ## Scope
 
-The target scope includes Search Console performance, sitemaps, URL inspection, and Indexing API notifications for JobPosting pages and BroadcastEvent markup embedded in VideoObject only. Sitemap inspection is not implemented yet.
+The target scope includes Search Console performance, sitemaps, URL inspection, and Indexing API notifications for JobPosting pages and BroadcastEvent markup embedded in VideoObject only. Sitemap inspection and explicit, preview-gated submission are implemented.
 
 It runs on Linux and macOS. Implemented authentication sources are `SEARCH_CONSOLE_AXI_SA_KEY`, `GOOGLE_APPLICATION_CREDENTIALS` (including its lowercase alias), a saved service-account path, and user ADC. `_FILE` and `_COMMAND` credential sources are planned for SC-3.
 
@@ -17,7 +17,6 @@ The Indexing API accepts no retry key. URL_UPDATED and URL_DELETED notifications
 ## Non-goals
 
 - GA4 analytics.
-- Sitemap submission.
 - General-purpose indexing notifications.
 - Discover or News indexing at launch.
 
