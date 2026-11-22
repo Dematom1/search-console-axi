@@ -200,6 +200,10 @@ export async function collectCoverage(options: {
       // ponytail: rewrite the JSON snapshot per URL; use SQLite if retained results outgrow memory or write throughput.
       await save(paths.state, state);
       inspected++;
+      if (interrupted) {
+        stop = "interrupted";
+        break;
+      }
     }
     ledger.attempts = ledger.attempts.filter((time) => time > now() - DAY);
     const resumeAt = Math.max(

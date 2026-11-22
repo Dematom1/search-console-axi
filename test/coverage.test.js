@@ -168,6 +168,24 @@ test("non-quota failure and invalid state cannot lose completed results or reset
   assert.equal(await readFile(state, "utf8"), "broken");
 });
 
+test("signal during the only inspection reports interruption after saving it", async (t) => {
+  const dir = await sandbox(t);
+  const options = {
+    site: "sc-domain:example.com",
+    urls: ["https://example.com/a"],
+    state: join(dir, "progress.json"),
+    inspect: async () => {
+      process.emit("SIGINT");
+      return indexed;
+    },
+  };
+  const result = await collectCoverage(options);
+  assert.equal(result.stop, "interrupted");
+  assert.equal(result.inspected, 1);
+  assert.equal(result.remaining, 0);
+  assert.equal(JSON.parse(await readFile(options.state, "utf8")).rows.length, 1);
+});
+
 test("SIGINT saves the completed URL, releases locks and resumes on rerun", async (t) => {
   const dir = await sandbox(t);
   const options = {
