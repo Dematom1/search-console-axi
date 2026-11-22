@@ -71,11 +71,7 @@ export async function run(args: string[]): Promise<string> {
   if (!["list", "get", "submit"].includes(action ?? ""))
     usage("Expected sitemaps list, get, or submit; run search-console-axi sitemaps --help");
   const writing = action === "submit";
-  const parsed = parseArgs(
-    rest,
-    ["--site", "--quota-project"],
-    writing ? ["--confirm"] : [],
-  );
+  const parsed = parseArgs(rest, ["--site", "--quota-project"], writing ? ["--confirm"] : []);
   if (parsed.positionals.length !== (action === "list" ? 0 : 1))
     usage("Use sitemaps list or sitemaps get|submit <sitemap-url> [--site <property>]");
   const flag = parsed.flags.get("--site");

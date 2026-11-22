@@ -156,7 +156,9 @@ test("list follows page tokens and rejects malformed successful responses", (t) 
   assert.equal(result.output.sitemaps[1].status, "unknown");
   assert.equal(result.output.sitemaps[1].isPending, null);
   assert.deepEqual(
-    result.requests.filter((request) => request.url.includes("searchconsole.googleapis.com")).map((request) => new URL(request.url).searchParams.get("pageToken")),
+    result.requests
+      .filter((request) => new URL(request.url).pathname.endsWith(`/sites/${encodeURIComponent(site)}/sitemaps`))
+      .map((request) => new URL(request.url).searchParams.get("pageToken")),
     [null, "next"],
   );
   const repeated = run(
@@ -166,7 +168,12 @@ test("list follows page tokens and rejects malformed successful responses", (t) 
   );
   assert.equal(repeated.status, 1, repeated.stdout);
   assert.match(repeated.output.error.message, /repeated sitemap page token/);
-  assert.equal(repeated.requests.filter((request) => request.url.includes("searchconsole.googleapis.com")).length, 2);
+  assert.equal(
+    repeated.requests.filter((request) =>
+      new URL(request.url).pathname.endsWith(`/sites/${encodeURIComponent(site)}/sitemaps`),
+    ).length,
+    2,
+  );
   for (const raw of ["[]", JSON.stringify({ sitemap: {} }), JSON.stringify({ sitemap: [], nextPageToken: 7 })]) {
     const malformed = run(t, ["list", "--site", site], [{ method: "GET", path: endpoint, raw }]);
     assert.equal(malformed.status, 1, malformed.stdout);
