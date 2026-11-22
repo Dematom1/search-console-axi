@@ -73,6 +73,9 @@ function run(t, args, responses = [], credential = key) {
       .filter((entry) => entry.url),
   };
 }
+// Oracle: Search Console API Sitemaps resource documents errors/warnings and
+// contents[].submitted as separate fields; warnings must not count as errors.
+// https://developers.google.com/webmaster-tools/v1/sitemaps#resource
 const entry = {
   path,
   type: "sitemap",
@@ -125,6 +128,38 @@ test("sitemaps list and get retain API columns and exact counts", (t) => {
   const get = run(t, ["get", path], [{ method: "GET", path: `${endpoint}/${encodeURIComponent(path)}`, body: entry }]);
   assert.equal(get.status, 0, get.stdout);
   assert.deepEqual(get.output.sitemap, list.output.sitemaps[0]);
+});
+test("list follows page tokens and rejects malformed successful responses", (t) => {
+  const result = run(
+    t,
+    ["list", "--site", site, "--sitemap-index", path],
+    [
+      {
+        method: "GET",
+        path: endpoint,
+        query: { sitemapIndex: path },
+        body: { sitemap: [entry], nextPageToken: "next" },
+      },
+      {
+        method: "GET",
+        path: endpoint,
+        query: { sitemapIndex: path, pageToken: "next" },
+        body: { sitemap: [{ path: "https://example.com/second.xml", errors: "0", warnings: "7" }] },
+      },
+    ],
+  );
+  assert.equal(result.status, 0, result.stdout);
+  assert.equal(result.output.count, 2);
+  assert.equal(result.output.sitemaps[1].status, "success");
+  assert.deepEqual(
+    result.requests.filter((request) => request.url.includes("searchconsole.googleapis.com")).map((request) => new URL(request.url).searchParams.get("pageToken")),
+    [null, "next"],
+  );
+  for (const raw of ["[]", JSON.stringify({ sitemap: {} })]) {
+    const malformed = run(t, ["list", "--site", site], [{ method: "GET", path: endpoint, raw }]);
+    assert.equal(malformed.status, 1, malformed.stdout);
+    assert.match(malformed.output.error.message, /request failed/);
+  }
 });
 test("empty list is explicit; index filter is sent", (t) => {
   const result = run(

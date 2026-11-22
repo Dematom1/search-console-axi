@@ -125,14 +125,30 @@ export async function run(args: string[]): Promise<string> {
         note: "Submission acknowledged; not a crawl or indexing guarantee",
       });
     if (action === "get") return encode({ site, sitemap: sitemap(response.data), note });
-    const data = object(response.data);
-    if (!Array.isArray(data.sitemap) && data.sitemap !== undefined) throw new Error("Invalid sitemap list");
-    const sitemaps = Array.isArray(data.sitemap) ? data.sitemap.map(sitemap) : [];
+    const data = response.data;
+    if (!isObject(data) || (data.sitemap !== undefined && !Array.isArray(data.sitemap)))
+      throw new Error("Invalid sitemap list");
+    const sitemaps = Array.isArray(data.sitemap) ? [...data.sitemap] : [];
+    let pageToken = data.nextPageToken;
+    while (typeof pageToken === "string" && pageToken.length > 0) {
+      const page = await auth.client.request<unknown>({
+        url: endpoint(site),
+        method: "GET",
+        retry: false,
+        params: { ...(sitemapIndex ? { sitemapIndex } : {}), pageToken },
+      });
+      const pageData = page.data;
+      if (!isObject(pageData) || (pageData.sitemap !== undefined && !Array.isArray(pageData.sitemap)))
+        throw new Error("Invalid sitemap list");
+      if (Array.isArray(pageData.sitemap)) sitemaps.push(...pageData.sitemap);
+      pageToken = pageData.nextPageToken;
+    }
+    const mapped = sitemaps.map(sitemap);
     return encode({
       site,
       ...(sitemapIndex ? { sitemapIndex } : {}),
-      count: sitemaps.length,
-      sitemaps,
+      count: mapped.length,
+      sitemaps: mapped,
       note,
       help: [
         "search-console-axi sitemaps get <sitemap-url> --site " + site,
