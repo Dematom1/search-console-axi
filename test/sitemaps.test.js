@@ -166,10 +166,27 @@ test("list follows page tokens and rejects malformed successful responses", (t) 
   assert.equal(repeated.status, 1, repeated.stdout);
   assert.match(repeated.output.error.message, /repeated sitemap page token/);
   assert.equal(repeated.requests.filter((request) => request.url.includes("searchconsole.googleapis.com")).length, 2);
-  for (const raw of ["[]", JSON.stringify({ sitemap: {} })]) {
+  for (const raw of ["[]", JSON.stringify({ sitemap: {} }), JSON.stringify({ sitemap: [], nextPageToken: 7 })]) {
     const malformed = run(t, ["list", "--site", site], [{ method: "GET", path: endpoint, raw }]);
     assert.equal(malformed.status, 1, malformed.stdout);
-    assert.match(malformed.output.error.message, /request failed/);
+    assert.match(malformed.output.error.message, /invalid sitemap list/);
+  }
+  const malformedPage = run(
+    t,
+    ["list", "--site", site],
+    [
+      { method: "GET", path: endpoint, body: { sitemap: [], nextPageToken: "next" } },
+      { method: "GET", path: endpoint, query: { pageToken: "next" }, body: { sitemap: [], nextPageToken: 7 } },
+    ],
+  );
+  assert.equal(malformedPage.status, 1, malformedPage.stdout);
+  assert.match(malformedPage.output.error.message, /invalid sitemap list/);
+});
+test("get rejects non-object successful responses", (t) => {
+  for (const raw of ["[]", "null"]) {
+    const result = run(t, ["get", path], [{ method: "GET", path: `${endpoint}/${encodeURIComponent(path)}`, raw }]);
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.output.error.message, /invalid sitemap response/);
   }
 });
 test("empty list is explicit", (t) => {

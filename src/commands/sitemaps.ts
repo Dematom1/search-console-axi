@@ -121,10 +121,18 @@ export async function run(args: string[]): Promise<string> {
         path: target,
         note: "Submission acknowledged; not a crawl or indexing guarantee",
       });
-    if (action === "get") return encode({ site, sitemap: sitemap(response.data), note });
+    if (action === "get") {
+      if (!isObject(response.data))
+        throw new AxiError("Search Console returned an invalid sitemap response", "SITEMAPS_ERROR");
+      return encode({ site, sitemap: sitemap(response.data), note });
+    }
     const data = response.data;
-    if (!isObject(data) || (data.sitemap !== undefined && !Array.isArray(data.sitemap)))
-      throw new Error("Invalid sitemap list");
+    if (
+      !isObject(data) ||
+      (data.sitemap !== undefined && !Array.isArray(data.sitemap)) ||
+      (data.nextPageToken !== undefined && typeof data.nextPageToken !== "string")
+    )
+      throw new AxiError("Search Console returned an invalid sitemap list", "SITEMAPS_ERROR");
     const sitemaps = Array.isArray(data.sitemap) ? [...data.sitemap] : [];
     let pageToken = data.nextPageToken;
     const seenPageTokens = new Set<string>();
@@ -139,8 +147,12 @@ export async function run(args: string[]): Promise<string> {
         params: { pageToken },
       });
       const pageData = page.data;
-      if (!isObject(pageData) || (pageData.sitemap !== undefined && !Array.isArray(pageData.sitemap)))
-        throw new Error("Invalid sitemap list");
+      if (
+        !isObject(pageData) ||
+        (pageData.sitemap !== undefined && !Array.isArray(pageData.sitemap)) ||
+        (pageData.nextPageToken !== undefined && typeof pageData.nextPageToken !== "string")
+      )
+        throw new AxiError("Search Console returned an invalid sitemap list", "SITEMAPS_ERROR");
       if (Array.isArray(pageData.sitemap)) sitemaps.push(...pageData.sitemap);
       pageToken = pageData.nextPageToken;
     }
