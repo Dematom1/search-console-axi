@@ -153,7 +153,8 @@ test("list follows page tokens and rejects malformed successful responses", (t) 
   );
   assert.equal(result.status, 0, result.stdout);
   assert.equal(result.output.count, 2);
-  assert.equal(result.output.sitemaps[1].status, "success");
+  assert.equal(result.output.sitemaps[1].status, "unknown");
+  assert.equal(result.output.sitemaps[1].isPending, null);
   assert.deepEqual(
     result.requests.filter((request) => request.url.includes("searchconsole.googleapis.com")).map((request) => new URL(request.url).searchParams.get("pageToken")),
     [null, "next"],
