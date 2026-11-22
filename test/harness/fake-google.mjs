@@ -8,7 +8,8 @@ const usedOnce = new Set();
 globalThis.fetch = async (input, init = {}) => {
   const url = typeof input === "string" || input instanceof URL ? String(input) : input.url;
   const method = init.method ?? "GET";
-  const body = typeof init.body === "string" ? init.body : "";
+  const body =
+    typeof init.body === "string" ? init.body : init.body instanceof URLSearchParams ? init.body.toString() : "";
   const target = new URL(url);
   if (
     !new Set([
