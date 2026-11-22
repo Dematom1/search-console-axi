@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.3](https://github.com/Dematom1/search-console-axi/compare/search-console-axi-v0.1.2...search-console-axi-v0.1.3) (2026-11-22)
+
+
+### Features
+
+* **search-console-axi:** add sitemap management commands ([#21](https://github.com/Dematom1/search-console-axi/issues/21)) ([bd4d59e](https://github.com/Dematom1/search-console-axi/commit/bd4d59e751970babac33c4804aad28ef34a85a59))
+* **search-console-axi:** add skill-first onboarding ([#20](https://github.com/Dematom1/search-console-axi/issues/20)) ([40c5284](https://github.com/Dematom1/search-console-axi/commit/40c528411a4d80a21123ec2ea6321a99fbb400dd))
+
+
+### Bug Fixes
+
+* **cli:** accept short version flags ([#17](https://github.com/Dematom1/search-console-axi/issues/17)) ([d076753](https://github.com/Dematom1/search-console-axi/commit/d0767531e6dd02c15fab9dcf67f93e1b02a74d0d))
+
 ## [0.1.2](https://github.com/Dematom1/search-console-axi/compare/search-console-axi-v0.1.1...search-console-axi-v0.1.2) (2026-11-08)
 
 
