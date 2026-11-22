@@ -175,7 +175,7 @@ export async function collectCoverage(options: {
         break;
       }
       const latest = Math.max(0, ...ledger.attempts);
-      await sleep(Math.max(0, latest + INTERVAL_MS - now()));
+      while (now() < latest + INTERVAL_MS) await sleep(latest + INTERVAL_MS - now());
       // Reserve quota before sending: interruptions and failed calls must not refund an attempt.
       ledger.attempts.push(now());
       await save(paths.ledger, ledger);

@@ -4,6 +4,8 @@ import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { AxiError } from "axi-sdk-js";
 import { usage } from "./args.js";
 
+const MAX_SITEMAP_ENTRIES = 100_000;
+
 export function validateUrl(value: string): string {
   let url: URL;
   try {
@@ -45,6 +47,7 @@ export async function readUrls(source: { sitemap: string } | { file: string }): 
   const pending = [validateUrl(source.sitemap)];
   const visited = new Set<string>();
   const urls = new Set<string>();
+  let entryCount = 0;
   const parser = new XMLParser({
     ignoreAttributes: true,
     removeNSPrefix: true,
@@ -58,7 +61,7 @@ export async function readUrls(source: { sitemap: string } | { file: string }): 
     visited.add(sitemap);
     let xml: string;
     try {
-      const response = await fetch(sitemap, { signal: AbortSignal.timeout(30_000) });
+      const response = await fetch(sitemap, { redirect: "error", signal: AbortSignal.timeout(30_000) });
       if (!response.ok) throw new Error();
       if (!response.body) throw new Error();
       const reader = response.body.getReader();
@@ -83,12 +86,18 @@ export async function readUrls(source: { sitemap: string } | { file: string }): 
     }
     if (/<!DOCTYPE|<!ENTITY/i.test(xml) || XMLValidator.validate(xml) !== true)
       usage("Invalid sitemap XML (DTDs are not supported).");
+    for (const match of xml.matchAll(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<(?:[\w.-]+:)?(?:url|sitemap)(?=[\s/>])/g)) {
+      if (match[0].startsWith("<") && !match[0].startsWith("<!--") && !match[0].startsWith("<![CDATA[")) {
+        if (++entryCount > MAX_SITEMAP_ENTRIES) usage("Sitemap exceeds 100000 total entries.");
+      }
+    }
     const doc = object(parser.parse(xml));
     const index = "sitemapindex" in doc;
     if (!index && !("urlset" in doc)) usage("Sitemap must contain urlset or sitemapindex.");
     const root = object(doc[index ? "sitemapindex" : "urlset"]);
     const entries = root[index ? "sitemap" : "url"];
-    for (const entry of entries === undefined ? [] : Array.isArray(entries) ? entries : [entries]) {
+    const list = entries === undefined ? [] : Array.isArray(entries) ? entries : [entries];
+    for (const entry of list) {
       const loc = object(entry).loc;
       if (typeof loc !== "string" || !loc.trim()) usage("Every sitemap entry requires a loc URL.");
       const url = validateUrl(loc.trim());

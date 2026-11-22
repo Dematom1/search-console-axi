@@ -78,6 +78,27 @@ test("coverage paces under 600/minute, saves results, resumes without repeats an
   assert.equal((await collectCoverage({ ...options, refresh: true })).inspected, 2);
 });
 
+test("quota pacing rechecks after an early timer wake", async (t) => {
+  const dir = await sandbox(t);
+  let clock = Date.parse("2026-01-02T00:00:00Z");
+  let earlyWake = true;
+  const starts = [];
+  await collectCoverage({
+    site: "sc-domain:example.com",
+    urls: ["https://example.com/a", "https://example.com/b"],
+    state: join(dir, "progress.json"),
+    now: () => clock,
+    sleep: async (ms) => {
+      clock += earlyWake ? ((earlyWake = false), Math.floor(ms / 2)) : ms;
+    },
+    inspect: async () => {
+      starts.push(clock);
+      return indexed;
+    },
+  });
+  assert.ok(starts[1] - starts[0] >= 110);
+});
+
 test("documented 2000/day local ceiling stops cleanly and continues across days", async (t) => {
   const dir = await sandbox(t);
   let clock = Date.parse("2026-01-02T00:00:00Z");
@@ -266,8 +287,12 @@ test("sitemap index expands children, XML entities and namespaces, deduplicates 
       "/bad": "<urlset><url></urlset>",
       "/dtd": '<!DOCTYPE x [<!ENTITY foo "bar">]><urlset/>',
       "/oversized": "oversized",
+      "/entry-limit": `<urlset>${"<url><loc>https://example.com/a</loc></url>".repeat(100001)}</urlset>`,
+      "/redirect": "redirect",
     };
-    if (req.url === "/oversized") {
+    if (req.url === "/redirect") {
+      res.writeHead(302, { Location: "http://127.0.0.1/private" }).end();
+    } else if (req.url === "/oversized") {
       res.write(Buffer.alloc(52_428_801));
       res.end();
     } else res.end(docs[req.url] ?? "bad");
@@ -283,6 +308,8 @@ test("sitemap index expands children, XML entities and namespaces, deduplicates 
   await assert.rejects(readUrls({ sitemap: base + "/bad" }), /Invalid sitemap XML/);
   await assert.rejects(readUrls({ sitemap: base + "/dtd" }), /Invalid sitemap XML/);
   await assert.rejects(readUrls({ sitemap: base + "/oversized" }), /Cannot fetch sitemap/);
+  await assert.rejects(readUrls({ sitemap: base + "/redirect" }), /Cannot fetch sitemap/);
+  await assert.rejects(readUrls({ sitemap: base + "/entry-limit" }), /100000 total entries/);
   const file = join(dir, "urls.txt");
   await writeFile(file, "\r\nhttps://example.com/a\r\nhttps://example.com/a\n https://example.com/b \n");
   assert.deepEqual(await readUrls({ file }), ["https://example.com/a", "https://example.com/b"]);
