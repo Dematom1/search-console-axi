@@ -3,6 +3,7 @@ import { encode } from "@toon-format/toon";
 import { command as setup } from "./commands/setup.js";
 import { command as report } from "./commands/report.js";
 import { command as inspect } from "./commands/inspect.js";
+import { command as coverage } from "./commands/coverage.js";
 import { command as indexing } from "./commands/indexing.js";
 import { command as sitemaps } from "./commands/sitemaps.js";
 import { usage } from "./args.js";
@@ -13,7 +14,7 @@ import { resolveSite } from "./site.js";
 
 const description =
   "Google Search Console reporting, sitemaps, URL inspection, and preview-gated Indexing API notifications for agents";
-export const commands = [setup, report, inspect, indexing, sitemaps];
+export const commands = [setup, report, inspect, coverage, indexing, sitemaps];
 const registry = new Map(commands.map((command) => [command.name, command]));
 export function getCommandHelp(args: string[]): string {
   if (!args.length)

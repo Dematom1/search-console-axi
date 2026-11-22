@@ -56,6 +56,26 @@ Reads use the same credentials and site resolution as reports. Lists include the
 Submit requires an explicit `--site` naming the exact property, even if a default is configured. Without `--confirm`, it previews the exact property, sitemap and PUT request locally without credentials or network access. With `--confirm`, it submits once, without retries. An acknowledgement does not guarantee a crawl or indexing. If the outcome is unknown, use `sitemaps get` before retrying.
 
 Submission requests `https://www.googleapis.com/auth/webmasters`; reads still request only `webmasters.readonly`. Read-only user ADC cannot submit: explicitly reauthorize your own Desktop OAuth client with the write scope. Existing refresh tokens are never silently widened. The authenticated account also needs permission to submit sitemaps on the property; Restricted access is not sufficient. No confirmed live submissions should be used for development or tests.
+## List pages by indexing state
+
+`coverage` reads URL Inspection for URLs you supply. The API does not expose the Page indexing report or its example URLs. Results describe Google's indexed version, not a live inspection or an exhaustive list of a property's pages.
+
+```sh
+search-console-axi coverage --sitemap https://example.com/sitemap.xml --site sc-domain:example.com
+search-console-axi coverage urls.txt --state /tmp/example-coverage.json
+search-console-axi coverage - --format json < urls.txt
+search-console-axi coverage urls.txt --format csv > coverage.csv
+```
+
+File and stdin input contain one absolute HTTP or HTTPS URL per line. Blank lines are ignored and duplicates are inspected once. Sitemap input supports XML sitemap indexes, child sitemaps, and gzip. Index cycles are ignored. A run accepts at most 1,000 sitemap documents, each up to 50 MiB uncompressed. DTDs are rejected. Coverage never submits URLs or calls the Indexing API.
+
+TOON output groups counts and URL lists by `coverageState`, `verdict`, canonical comparison (`same`, `different`, or `unknown`), and last-crawl age. Crawl buckets are under 7 days, 7–29 days, 30 days or older, and unknown. Missing canonical fields do not imply a mismatch. JSON output includes per-URL rows plus progress and quota metadata. CSV output contains per-URL rows on stdout and TOON progress metadata on stderr. Exports retain the documented field names `coverageState`, `verdict`, `googleCanonical`, `userCanonical`, and `lastCrawlTime`, plus `url` and `inspectedAt`.
+
+Google's [URL Inspection limits](https://developers.google.com/webmaster-tools/limits#url_inspection) are 2,000 requests per property per day and 600 per minute. Coverage spaces requests at least 110 ms apart and uses a conservative rolling 24-hour local budget. It reserves quota before each attempt, including failed or interrupted requests. A shared per-property ledger prevents separate progress files from resetting local accounting. External usage is unknown, not reported as zero. Any API quota error stops the run and conservatively pauses that property for 24 hours. Output reports requests inspected in this run, URLs remaining, locally observed attempts, and the earliest local resume time. A quota stop exits successfully with partial results; check `remaining` and `stop` before treating an export as complete.
+
+Rerun the same command to resume. Finished URLs are not inspected again unless you pass `--refresh`; refresh does not reset quota. Results and quota accounting use atomic file replacement with private file permissions. The default state lives under `$XDG_STATE_HOME/search-console-axi/coverage`, or `~/.local/state/search-console-axi/coverage`, never the repository. `--state` names a different progress file but leaves quota accounting in the user state directory. Do not delete the ledger to bypass limits. Progress files belong to one property and contain URL data; protect them accordingly.
+
+Ctrl-C and SIGTERM finish the in-flight inspection, save it, and stop before the next URL. Concurrent runs for the same property or progress file fail with a lock error. After a forced kill, remove only the lock file named by the error, and only after confirming no coverage process is running. The saved results remain intact.
 
 ## Send Indexing API notifications
 
