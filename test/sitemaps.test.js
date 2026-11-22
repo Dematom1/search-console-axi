@@ -127,23 +127,26 @@ test("sitemaps list and get retain API columns and exact counts", (t) => {
   );
   const get = run(t, ["get", path], [{ method: "GET", path: `${endpoint}/${encodeURIComponent(path)}`, body: entry }]);
   assert.equal(get.status, 0, get.stdout);
-  assert.deepEqual(get.output.sitemap, list.output.sitemaps[0]);
+  assert.deepEqual(get.output.sitemap, {
+    ...entry,
+    status: "success",
+    contents: [...entry.contents.slice(0, 1), { ...entry.contents[1], indexed: null }],
+  });
 });
 test("list follows page tokens and rejects malformed successful responses", (t) => {
   const result = run(
     t,
-    ["list", "--site", site, "--sitemap-index", path],
+    ["list", "--site", site],
     [
       {
         method: "GET",
         path: endpoint,
-        query: { sitemapIndex: path },
         body: { sitemap: [entry], nextPageToken: "next" },
       },
       {
         method: "GET",
         path: endpoint,
-        query: { sitemapIndex: path, pageToken: "next" },
+        query: { pageToken: "next" },
         body: { sitemap: [{ path: "https://example.com/second.xml", errors: "0", warnings: "7" }] },
       },
     ],
@@ -155,18 +158,22 @@ test("list follows page tokens and rejects malformed successful responses", (t) 
     result.requests.filter((request) => request.url.includes("searchconsole.googleapis.com")).map((request) => new URL(request.url).searchParams.get("pageToken")),
     [null, "next"],
   );
+  const repeated = run(
+    t,
+    ["list", "--site", site],
+    [{ method: "GET", path: endpoint, body: { sitemap: [], nextPageToken: "loop" } }],
+  );
+  assert.equal(repeated.status, 1, repeated.stdout);
+  assert.match(repeated.output.error.message, /repeated sitemap page token/);
+  assert.equal(repeated.requests.filter((request) => request.url.includes("searchconsole.googleapis.com")).length, 2);
   for (const raw of ["[]", JSON.stringify({ sitemap: {} })]) {
     const malformed = run(t, ["list", "--site", site], [{ method: "GET", path: endpoint, raw }]);
     assert.equal(malformed.status, 1, malformed.stdout);
     assert.match(malformed.output.error.message, /request failed/);
   }
 });
-test("empty list is explicit; index filter is sent", (t) => {
-  const result = run(
-    t,
-    ["list", "--sitemap-index", path],
-    [{ method: "GET", path: endpoint, query: { sitemapIndex: path }, body: {} }],
-  );
+test("empty list is explicit", (t) => {
+  const result = run(t, ["list"], [{ method: "GET", path: endpoint, body: {} }]);
   assert.equal(result.status, 0, result.stdout);
   assert.equal(result.output.count, 0);
   assert.deepEqual(result.output.sitemaps, []);
@@ -185,6 +192,7 @@ test("preview and invalid arguments never load credentials or call Google", (t) 
     ["submit", "https://user:SECRET@example.com/sitemap.xml", "--site", site],
     ["get", "https://example.com/sitemap.xml#fragment"],
     ["list", "--confirm"],
+    ["list", "--sitemap-index", path],
     ["list", "extra"],
     ["get"],
     ["list", "--typo"],

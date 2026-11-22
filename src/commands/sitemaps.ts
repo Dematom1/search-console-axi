@@ -73,7 +73,7 @@ export async function run(args: string[]): Promise<string> {
   const writing = action === "submit";
   const parsed = parseArgs(
     rest,
-    ["--site", "--quota-project", ...(action === "list" ? ["--sitemap-index"] : [])],
+    ["--site", "--quota-project"],
     writing ? ["--confirm"] : [],
   );
   if (parsed.positionals.length !== (action === "list" ? 0 : 1))
@@ -81,8 +81,6 @@ export async function run(args: string[]): Promise<string> {
   const flag = parsed.flags.get("--site");
   const requestedSite = typeof flag === "string" ? validateSite(flag) : undefined;
   const target = action === "list" ? undefined : urlInput(parsed.positionals[0]!);
-  const index = parsed.flags.get("--sitemap-index");
-  const sitemapIndex = typeof index === "string" ? urlInput(index) : undefined;
   if (writing && !requestedSite)
     usage("sitemaps submit requires --site <exact-property> so the preview names the explicit writable target");
   const endpoint = (site: string) =>
@@ -115,7 +113,6 @@ export async function run(args: string[]): Promise<string> {
       url: endpoint(site),
       method: writing ? "PUT" : "GET",
       retry: false,
-      ...(sitemapIndex ? { params: { sitemapIndex } } : {}),
     });
     if (writing)
       return encode({
@@ -130,12 +127,16 @@ export async function run(args: string[]): Promise<string> {
       throw new Error("Invalid sitemap list");
     const sitemaps = Array.isArray(data.sitemap) ? [...data.sitemap] : [];
     let pageToken = data.nextPageToken;
+    const seenPageTokens = new Set<string>();
     while (typeof pageToken === "string" && pageToken.length > 0) {
+      if (seenPageTokens.has(pageToken))
+        throw new AxiError("Search Console returned a repeated sitemap page token", "SITEMAPS_ERROR");
+      seenPageTokens.add(pageToken);
       const page = await auth.client.request<unknown>({
         url: endpoint(site),
         method: "GET",
         retry: false,
-        params: { ...(sitemapIndex ? { sitemapIndex } : {}), pageToken },
+        params: { pageToken },
       });
       const pageData = page.data;
       if (!isObject(pageData) || (pageData.sitemap !== undefined && !Array.isArray(pageData.sitemap)))
@@ -146,13 +147,12 @@ export async function run(args: string[]): Promise<string> {
     const mapped = sitemaps.map(sitemap);
     return encode({
       site,
-      ...(sitemapIndex ? { sitemapIndex } : {}),
       count: mapped.length,
       sitemaps: mapped,
       note,
       help: [
         "search-console-axi sitemaps get <sitemap-url> --site " + site,
-        "search-console-axi sitemaps list --site " + site + " --sitemap-index <index-url>",
+        "search-console-axi sitemaps list --site " + site,
       ],
     });
   } catch (error) {
@@ -208,9 +208,7 @@ export const command = {
             : note,
         flags: {
           ...commonFlags,
-          ...(action === "list"
-            ? { "--sitemap-index <url>": "List entries included in this sitemap index" }
-            : { "<sitemap-url>": "Required absolute HTTP(S) sitemap URL" }),
+          ...(action === "list" ? {} : { "<sitemap-url>": "Required absolute HTTP(S) sitemap URL" }),
           ...(action === "submit" ? { "--confirm": "Submit the exact previewed property and sitemap" } : {}),
         },
         examples: [

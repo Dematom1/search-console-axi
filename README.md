@@ -46,13 +46,12 @@ Run `search-console-axi` for the default site's last seven complete days of clic
 
 ```sh
 search-console-axi sitemaps list --site sc-domain:example.com
-search-console-axi sitemaps list --site sc-domain:example.com --sitemap-index https://example.com/sitemap.xml
 search-console-axi sitemaps get https://example.com/sitemap.xml --site sc-domain:example.com
 search-console-axi sitemaps submit https://example.com/sitemap.xml --site sc-domain:example.com
 search-console-axi sitemaps submit https://example.com/sitemap.xml --site sc-domain:example.com --confirm
 ```
 
-Reads use the same credentials and site resolution as reports. Lists include the path, type, `isSitemapsIndex`, `lastSubmitted`, `lastDownloaded` (last read), `isPending`, derived status, errors, warnings, and `contents[]` counts. Use `--sitemap-index` to list entries included in an index. Status is derived from pending/error fields, not the Search Console UI's status text. Discovered pages are `contents[].submitted` counts by content type; the API has no separate UI discovered-pages column, so no total across content types is invented. `contents[].indexed` is deprecated and is shown only as returned, not reliable index coverage. Missing fields are null (unknown), not zero.
+Reads use the same credentials and site resolution as reports. Lists include the path, type, `isSitemapsIndex`, `lastSubmitted`, `lastDownloaded` (last read), `isPending`, derived status, errors, warnings, and `contents[]` counts. Status is derived from pending/error fields, not the Search Console UI's status text. Discovered pages are `contents[].submitted` counts by content type; the API has no separate UI discovered-pages column, so no total across content types is invented. `contents[].indexed` is deprecated and is shown only as returned, not reliable index coverage. Missing fields are null (unknown), not zero.
 
 Submit requires an explicit `--site` naming the exact property, even if a default is configured. Without `--confirm`, it previews the exact property, sitemap and PUT request locally without credentials or network access. With `--confirm`, it submits once, without retries. An acknowledgement does not guarantee a crawl or indexing. If the outcome is unknown, use `sitemaps get` before retrying.
 
