@@ -56,6 +56,7 @@ Reads use the same credentials and site resolution as reports. Lists include the
 Submit requires an explicit `--site` naming the exact property, even if a default is configured. Without `--confirm`, it previews the exact property, sitemap and PUT request locally without credentials or network access. With `--confirm`, it submits once, without retries. An acknowledgement does not guarantee a crawl or indexing. If the outcome is unknown, use `sitemaps get` before retrying.
 
 Submission requests `https://www.googleapis.com/auth/webmasters`; reads still request only `webmasters.readonly`. Read-only user ADC cannot submit: explicitly reauthorize your own Desktop OAuth client with the write scope. Existing refresh tokens are never silently widened. The authenticated account also needs permission to submit sitemaps on the property; Restricted access is not sufficient. No confirmed live submissions should be used for development or tests.
+
 ## List pages by indexing state
 
 `coverage` reads URL Inspection for URLs you supply. The API does not expose the Page indexing report or its example URLs. Results describe Google's indexed version, not a live inspection or an exhaustive list of a property's pages.
