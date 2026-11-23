@@ -155,10 +155,12 @@ export async function collectCoverage(options: {
       parseState(value, options.site),
     );
     const ledger = await load(paths.ledger, { attempts: [], blockedUntil: 0 }, parseLedger);
+    ledger.attempts = ledger.attempts.map((time) => Math.min(time, now()));
     const rows = new Map(state.rows.map((row) => [row.url, row]));
     const urls = [...new Set(options.urls)];
     const pending = urls.filter((url) => options.refresh || !rows.has(url));
     let inspected = 0;
+    let lastRequestAt: number | undefined;
     let stop = "complete";
     for (const url of pending) {
       if (interrupted) {
@@ -175,7 +177,14 @@ export async function collectCoverage(options: {
         break;
       }
       const latest = Math.max(0, ...ledger.attempts);
-      while (now() < latest + INTERVAL_MS) await sleep(latest + INTERVAL_MS - now());
+      const delay =
+        lastRequestAt === undefined
+          ? Math.max(0, latest + INTERVAL_MS - now())
+          : Math.max(0, INTERVAL_MS - (performance.now() - lastRequestAt));
+      const waitingSince = performance.now();
+      while (performance.now() - waitingSince < delay)
+        await sleep(delay - (performance.now() - waitingSince));
+      lastRequestAt = performance.now();
       // Reserve quota before sending: interruptions and failed calls must not refund an attempt.
       ledger.attempts.push(now());
       await save(paths.ledger, ledger);

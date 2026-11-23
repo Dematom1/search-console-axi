@@ -99,6 +99,47 @@ test("quota pacing rechecks after an early timer wake", async (t) => {
   assert.ok(starts[1] - starts[0] >= 110);
 });
 
+test("future quota timestamps are clamped and wall-clock rollback does not stall pacing", async (t) => {
+  const dir = await sandbox(t);
+  let clock = Date.parse("2026-01-02T00:00:00Z");
+  const paths = coveragePaths("sc-domain:example.com", join(dir, "future.json"));
+  await mkdir(dirname(paths.ledger), { recursive: true });
+  await writeFile(paths.ledger, JSON.stringify({ attempts: [clock + 86_400_000], blockedUntil: 0 }));
+  const waits = [];
+  const future = await collectCoverage({
+    site: "sc-domain:example.com",
+    urls: ["https://example.com/future"],
+    state: paths.state,
+    now: () => clock,
+    sleep: async (ms) => {
+      waits.push(ms);
+      clock += ms;
+    },
+    inspect: async () => indexed,
+  });
+  assert.equal(future.inspected, 1);
+  assert.ok(waits.every((ms) => ms <= 110));
+
+  clock = Date.parse("2026-01-02T00:00:00Z");
+  let sleeps = 0;
+  const rolledBack = await collectCoverage({
+    site: "sc-domain:example.com",
+    urls: ["https://example.com/a", "https://example.com/b"],
+    state: join(dir, "rollback.json"),
+    now: () => clock,
+    sleep: async (ms) => {
+      if (++sleeps > 2) throw new Error("pacing stalled after wall-clock rollback");
+      clock += ms;
+    },
+    inspect: async () => {
+      clock -= 60_000;
+      return indexed;
+    },
+  });
+  assert.equal(rolledBack.inspected, 2);
+  assert.ok(sleeps <= 2);
+});
+
 test("documented 2000/day local ceiling stops cleanly and continues across days", async (t) => {
   const dir = await sandbox(t);
   let clock = Date.parse("2026-01-02T00:00:00Z");
