@@ -91,7 +91,7 @@ export async function readUrls(source: { sitemap: string } | { file: string }): 
     if (/<!DOCTYPE|<!ENTITY/i.test(xml) || XMLValidator.validate(xml) !== true)
       usage("Invalid sitemap XML (DTDs are not supported).");
     for (const match of xml.matchAll(
-      /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<(?:[\w.-]+:)?(?:url|sitemap)(?=[\s/>])/g,
+      /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<(?:[^\s<>/:]+:)?(?:url|sitemap)(?=[\s/>])/g,
     )) {
       if (match[0].startsWith("<") && !match[0].startsWith("<!--") && !match[0].startsWith("<![CDATA[")) {
         if (++entryCount > MAX_SITEMAP_ENTRIES) usage("Sitemap exceeds 100000 total entries.");

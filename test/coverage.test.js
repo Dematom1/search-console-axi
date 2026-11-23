@@ -71,7 +71,7 @@ test("coverage paces under 600/minute, saves results, resumes without repeats an
   assert.equal(first.remaining, 0);
   assert.equal(first.quota.local_attempts_24h, 2);
   assert.ok(starts[1] - starts[0] >= 100);
-  assert.equal(waits.length, 1);
+  assert.equal(waits.length, 2);
   assert.equal((await collectCoverage(options)).inspected, 0);
   assert.equal(starts.length, 2);
   assert.equal(JSON.parse(await readFile(options.state, "utf8")).rows.length, 2);
@@ -129,7 +129,8 @@ test("future quota timestamps are clamped and wall-clock rollback does not stall
     inspect: async () => indexed,
   });
   assert.equal(future.inspected, 1);
-  assert.ok(waits.every((ms) => ms <= 110));
+  assert.deepEqual(waits, [110]);
+  assert.equal(future.quota.local_attempts_24h, 2);
 
   clock = Date.parse("2026-01-02T00:00:00Z");
   monotonic = 0;

@@ -1,9 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { setTimeout } from "node:timers/promises";
 import { AxiError } from "axi-sdk-js";
+import { openCoverageState, readJson as load, saveJson as save } from "./coverage-state.js";
+import { matchesSite } from "./site.js";
 
 // Official per-property URL Inspection limits: 2,000/day, 600/minute.
 // https://developers.google.com/webmaster-tools/limits#url_inspection
@@ -12,7 +14,6 @@ export const INTERVAL_MS = 110; // Below 600/minute, including across resumed ru
 const DAY = 86_400_000;
 const fields = ["coverageState", "verdict", "googleCanonical", "userCanonical", "lastCrawlTime"] as const;
 export type Row = { url: string; inspectedAt: string } & Record<(typeof fields)[number], string>;
-type State = { version: 1; site: string; rows: Row[] };
 type Ledger = { attempts: number[]; blockedUntil: number };
 
 function record(value: unknown): Record<string, unknown> {
@@ -40,26 +41,6 @@ export function inspectionRow(url: string, value: unknown, now: number): Row {
   };
 }
 
-async function load<T>(path: string, empty: T, parse: (value: unknown) => T): Promise<T> {
-  try {
-    return parse(JSON.parse(await readFile(path, "utf8")));
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return empty;
-    throw new AxiError(
-      "Cannot read coverage state or quota ledger; restore a valid file before retrying.",
-      "STATE_ERROR",
-    );
-  }
-}
-async function save(path: string, data: unknown): Promise<void> {
-  const temp = `${path}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(temp, JSON.stringify(data), { mode: 0o600, flag: "wx" });
-    await rename(temp, path);
-  } finally {
-    await unlink(temp).catch(() => {});
-  }
-}
 async function lock(path: string): Promise<() => Promise<void>> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   // Never guess whether a concurrent writer is alive. A crash leaves a removable lock, not corrupt state.
@@ -85,25 +66,6 @@ export function coveragePaths(site: string, state?: string) {
   return { state: resolve(state ?? join(root, `${id}.json`)), ledger: join(root, `${id}.quota.json`) };
 }
 
-function parseState(value: unknown, site: string): State {
-  const state = record(value);
-  if (state.version !== 1 || state.site !== site || !Array.isArray(state.rows)) throw new Error("State mismatch");
-  const rows = state.rows.map((item: unknown) => {
-    const row = record(item);
-    if (
-      typeof row.url !== "string" ||
-      typeof row.inspectedAt !== "string" ||
-      !fields.every((key) => typeof row[key] === "string")
-    )
-      throw new Error("Invalid row");
-    return {
-      url: row.url,
-      inspectedAt: row.inspectedAt,
-      ...Object.fromEntries(fields.map((key) => [key, row[key]])),
-    } as Row;
-  });
-  return { version: 1, site, rows };
-}
 function parseLedger(value: unknown): Ledger {
   const ledger = record(value);
   if (
@@ -145,6 +107,8 @@ export async function collectCoverage(options: {
     throw new AxiError("State path conflicts with quota ledger.", "VALIDATION_ERROR");
   const unlockLedger = await lock(`${paths.ledger}.lock`);
   let unlockState: (() => Promise<void>) | undefined;
+  let store: Awaited<ReturnType<typeof openCoverageState>> | undefined;
+  const acquiredAt = monotonicNow();
   let interrupted = false;
   const interrupt = () => {
     interrupted = true;
@@ -153,16 +117,18 @@ export async function collectCoverage(options: {
   process.on("SIGTERM", interrupt);
   try {
     unlockState = await lock(`${paths.state}.lock`);
-    const state = await load(paths.state, { version: 1, site: options.site, rows: [] } satisfies State, (value) =>
-      parseState(value, options.site),
-    );
+    store = await openCoverageState(paths.state, options.site);
     const ledger = await load(paths.ledger, { attempts: [], blockedUntil: 0 }, parseLedger);
     ledger.attempts = ledger.attempts.map((time) => Math.min(time, now()));
-    const rows = new Map(state.rows.map((row) => [row.url, row]));
-    const urls = [...new Set(options.urls)];
-    const pending = urls.filter((url) => options.refresh || !rows.has(url));
+    const rows = store.rows;
+    const allUrls = [...new Set(options.urls)];
+    const skipped = allUrls
+      .filter((url) => !matchesSite(url, options.site))
+      .map((url) => ({ url, reason: "out of property" }));
+    const urls = allUrls.filter((url) => matchesSite(url, options.site));
+    const pending = await store.pending(urls, options.refresh ?? false);
     let inspected = 0;
-    let lastRequestAt: number | undefined;
+    let lastRequestAt = acquiredAt;
     let stop = "complete";
     for (const url of pending) {
       if (interrupted) {
@@ -178,19 +144,22 @@ export async function collectCoverage(options: {
         stop = "daily_limit";
         break;
       }
-      const latest = Math.max(0, ...ledger.attempts);
-      const delay =
-        lastRequestAt === undefined
-          ? Math.max(0, latest + INTERVAL_MS - now())
-          : Math.max(0, INTERVAL_MS - (monotonicNow() - lastRequestAt));
-      const waitingSince = monotonicNow();
-      while (monotonicNow() - waitingSince < delay) await sleep(delay - (monotonicNow() - waitingSince));
-      lastRequestAt = monotonicNow();
+      while (monotonicNow() - lastRequestAt < INTERVAL_MS && !interrupted)
+        await sleep(INTERVAL_MS - (monotonicNow() - lastRequestAt));
+      if (interrupted) {
+        stop = "interrupted";
+        break;
+      }
       // Reserve quota before sending: interruptions and failed calls must not refund an attempt.
       ledger.attempts.push(now());
       await save(paths.ledger, ledger);
+      if (interrupted) {
+        stop = "interrupted";
+        break;
+      }
       let result: unknown;
       try {
+        lastRequestAt = monotonicNow();
         result = await options.inspect(url);
       } catch (error) {
         if (isQuotaError(error)) {
@@ -205,10 +174,7 @@ export async function collectCoverage(options: {
         );
       }
       const row = inspectionRow(url, result, now());
-      rows.set(url, row);
-      state.rows = [...rows.values()];
-      // ponytail: rewrite the JSON snapshot per URL; use SQLite if retained results outgrow memory or write throughput.
-      await save(paths.state, state);
+      await store.record(row);
       inspected++;
       if (interrupted) {
         stop = "interrupted";
@@ -223,7 +189,8 @@ export async function collectCoverage(options: {
     return {
       site: options.site,
       state: paths.state,
-      total: urls.length,
+      total: allUrls.length,
+      skipped,
       inspected,
       remaining: pending.length - inspected,
       stop,
@@ -239,12 +206,19 @@ export async function collectCoverage(options: {
       rows: urls.flatMap((url) => (rows.has(url) ? [rows.get(url)!] : [])),
     };
   } finally {
-    process.off("SIGINT", interrupt);
-    process.off("SIGTERM", interrupt);
     try {
-      await unlockState?.();
+      await store?.compact();
     } finally {
-      await unlockLedger();
+      try {
+        await unlockState?.();
+      } finally {
+        try {
+          await unlockLedger();
+        } finally {
+          process.off("SIGINT", interrupt);
+          process.off("SIGTERM", interrupt);
+        }
+      }
     }
   }
 }

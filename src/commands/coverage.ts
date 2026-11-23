@@ -12,9 +12,10 @@ export const help: Help = {
     "Read URL Inspection coverage for explicit URLs (not the Page indexing report). Saves progress locally; rerun to resume.",
   flags: {
     "--sitemap <url>": "Fetch a sitemap or sitemap index; mutually exclusive with file/stdin input",
-    "--site <site>": "Select property; defaults to configured or first verified site",
+    "--site <site>":
+      "Prefer exact verified property; out-of-property URLs are skipped (default: configured or first verified)",
     "--state <file>": "Progress file; default: user state directory, per property",
-    "--refresh": "Re-inspect completed URLs without resetting quota accounting",
+    "--refresh": "Start or resume a refresh pass without resetting quota accounting",
     "--format <toon|json|csv>": "Default toon: grouped counts and URL lists; json/csv: per-URL rows",
     "--quota-project <id>": "Set quota project",
     "--help": "Show help",
@@ -61,7 +62,12 @@ export async function run(args: string[] = []): Promise<string> {
   return encode({
     ...summary,
     groups: groupCoverage(rows),
-    help: result.remaining ? ["Rerun the same command after quota is available; finished URLs are saved."] : [],
+    help: [
+      ...(result.remaining ? ["Rerun the same command after quota is available; finished URLs are saved."] : []),
+      ...(result.skipped.length
+        ? ["Out-of-property URLs were skipped; narrow the input or select their property with --site."]
+        : []),
+    ],
   });
 }
 export const name = "coverage";
