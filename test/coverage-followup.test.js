@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { generateKeyPairSync } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { decode } from "@toon-format/toon";
 import { collectCoverage, coveragePaths } from "../dist/src/coverage.js";
 import { readUrls } from "../dist/src/coverage-input.js";
 
@@ -326,26 +327,27 @@ test("fake Google coverage selects the exact verified prefix and its quota ledge
         ],
       }),
     );
+    const spawnOptions = {
+      encoding: "utf8",
+      input: "https://example.com/shop/a\nhttps://elsewhere.invalid/a\n",
+      env: {
+        ...process.env,
+        HOME: dir,
+        XDG_CONFIG_HOME: dir,
+        XDG_STATE_HOME: dir,
+        SEARCH_CONSOLE_AXI_SA_KEY: JSON.stringify({
+          type: "service_account",
+          client_email: "fake@example.invalid",
+          private_key: privateKey,
+        }),
+        FAKE_GSC_SCENARIO: scenario,
+        FAKE_LOG: log,
+      },
+    };
     const result = spawnSync(
       process.execPath,
       ["--import", preload, cli, "coverage", "-", "--site", prefix, "--format", "json", "--refresh"],
-      {
-        encoding: "utf8",
-        input: "https://example.com/shop/a\nhttps://elsewhere.invalid/a\n",
-        env: {
-          ...process.env,
-          HOME: dir,
-          XDG_CONFIG_HOME: dir,
-          XDG_STATE_HOME: dir,
-          SEARCH_CONSOLE_AXI_SA_KEY: JSON.stringify({
-            type: "service_account",
-            client_email: "fake@example.invalid",
-            private_key: privateKey,
-          }),
-          FAKE_GSC_SCENARIO: scenario,
-          FAKE_LOG: log,
-        },
-      },
+      spawnOptions,
     );
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const report = JSON.parse(result.stdout);
@@ -353,6 +355,18 @@ test("fake Google coverage selects the exact verified prefix and its quota ledge
     assert.equal(report.inspected, 1);
     assert.deepEqual(report.skipped, [{ url: "https://elsewhere.invalid/a", reason: "out of property" }]);
     assert.equal(report.state, coveragePaths(prefix).state);
+    assert.match(report.help.join("\n"), /narrow the input or select their property with --site/);
+    const csv = spawnSync(
+      process.execPath,
+      ["--import", preload, cli, "coverage", "-", "--site", prefix, "--format", "csv"],
+      spawnOptions,
+    );
+    assert.equal(csv.status, 0, csv.stdout + csv.stderr);
+    assert.match(csv.stdout, /^url,coverageState/);
+    const csvSummary = decode(csv.stderr);
+    assert.deepEqual(csvSummary.skipped, report.skipped);
+    assert.deepEqual(csvSummary.help, report.help);
+    assert.equal(csvSummary.inspected, 0);
   }
   const inspections = (await readFile(log, "utf8"))
     .trim()

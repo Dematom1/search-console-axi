@@ -53,22 +53,22 @@ export async function run(args: string[] = []): Promise<string> {
     refresh: parsed.flags.has("--refresh"),
     inspect: async (url) => decode(await inspectUrl(auth, url, resolution.site)),
   });
-  if (format === "json") return JSON.stringify(result);
-  const { rows, ...summary } = result;
-  if (format === "csv") {
-    process.stderr.write(encode(summary) + "\n");
-    return coverageCsv(rows);
-  }
-  return encode({
-    ...summary,
-    groups: groupCoverage(rows),
+  const output = {
+    ...result,
     help: [
       ...(result.remaining ? ["Rerun the same command after quota is available; finished URLs are saved."] : []),
       ...(result.skipped.length
         ? ["Out-of-property URLs were skipped; narrow the input or select their property with --site."]
         : []),
     ],
-  });
+  };
+  if (format === "json") return JSON.stringify(output);
+  const { rows, ...summary } = output;
+  if (format === "csv") {
+    process.stderr.write(encode(summary) + "\n");
+    return coverageCsv(rows);
+  }
+  return encode({ ...summary, groups: groupCoverage(rows) });
 }
 export const name = "coverage";
 export const command = { name, help: helpText(name, help), run };
