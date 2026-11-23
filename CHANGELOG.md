@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/Dematom1/search-console-axi/compare/search-console-axi-v0.1.3...search-console-axi-v0.1.4) (2026-11-23)
+
+
+### Features
+
+* **coverage:** report URL indexing coverage ([#22](https://github.com/Dematom1/search-console-axi/issues/22)) ([8e57ea8](https://github.com/Dematom1/search-console-axi/commit/8e57ea802493c04d0471bfe95627d6a1079d70fd))
+
 ## [0.1.3](https://github.com/Dematom1/search-console-axi/compare/search-console-axi-v0.1.2...search-console-axi-v0.1.3) (2026-11-22)
 
 
