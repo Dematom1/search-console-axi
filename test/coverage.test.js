@@ -227,7 +227,7 @@ test("SIGINT saves the completed URL, releases locks and resumes on rerun", asyn
 
 test("group counts, omitted canonicals/crawl times and JSON/CSV rows follow documented fields", async (t) => {
   const dir = await sandbox(t);
-  const time = Date.parse("2026-01-02T00:00:00Z");
+  let time = Date.parse("2026-01-02T00:00:00Z");
   let call = 0;
   const result = await collectCoverage({
     site: "sc-domain:example.com",
@@ -240,7 +240,9 @@ test("group counts, omitted canonicals/crawl times and JSON/CSV rows follow docu
     ],
     state: join(dir, "progress.json"),
     now: () => time,
-    sleep: async () => {},
+    sleep: async (ms) => {
+      time += ms;
+    },
     inspect: async () =>
       [
         indexed,
