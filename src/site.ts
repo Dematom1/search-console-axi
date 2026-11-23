@@ -30,6 +30,24 @@ export function selectVerifiedSite(
   const site = [...sites].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[0];
   return site ? { site, site_source: "first_verified" } : undefined;
 }
+export function matchesSite(candidate: string, property: string): boolean {
+  if (candidate === property) return true;
+  try {
+    const url = new URL(candidate);
+    if (property.startsWith("sc-domain:")) {
+      const domain = property.slice("sc-domain:".length);
+      return url.hostname === domain || url.hostname.endsWith(`.${domain}`);
+    }
+    const verifiedUrl = new URL(property);
+    return (
+      verifiedUrl.origin === url.origin &&
+      (url.pathname === verifiedUrl.pathname ||
+        url.pathname.startsWith(verifiedUrl.pathname.endsWith("/") ? verifiedUrl.pathname : `${verifiedUrl.pathname}/`))
+    );
+  } catch {
+    return false;
+  }
+}
 export async function resolveSite(auth: AuthProvider, flag?: string): Promise<SiteResolution> {
   const environment = process.env["SEARCH_CONSOLE_AXI_SITE"];
   const saved = savedDefaultSite();
@@ -41,33 +59,12 @@ export async function resolveSite(auth: AuthProvider, flag?: string): Promise<Si
     { site: saved, source: "saved_config" },
   ];
   const requested = candidates.find((candidate) => candidate.site);
-  const matches = (candidate: string, property: string) => {
-    if (candidate === property) return true;
-    try {
-      const url = new URL(candidate);
-      if (property.startsWith("sc-domain:")) {
-        const domain = property.slice("sc-domain:".length);
-        if (url.hostname === domain || url.hostname.endsWith(`.${domain}`)) return true;
-        return false;
-      }
-      const verifiedUrl = new URL(property);
-      return (
-        verifiedUrl.origin === url.origin &&
-        (url.pathname === verifiedUrl.pathname ||
-          url.pathname.startsWith(
-            verifiedUrl.pathname.endsWith("/") ? verifiedUrl.pathname : `${verifiedUrl.pathname}/`,
-          ))
-      );
-    } catch {
-      return false;
-    }
-  };
-  if (requested && !verified.some((entry) => matches(requested.site!, entry.siteUrl)))
+  if (requested && !verified.some((entry) => matchesSite(requested.site!, entry.siteUrl)))
     return usage(`Selected site '${requested.site}' is not a verified property`);
   const selectedCandidate =
     requested &&
     (verified.find((entry) => entry.siteUrl === requested.site) ??
-      verified.find((entry) => matches(requested.site!, entry.siteUrl)));
+      verified.find((entry) => matchesSite(requested.site!, entry.siteUrl)));
   const selected = selectedCandidate
     ? { site: selectedCandidate.siteUrl, site_source: requested.source }
     : selectVerifiedSite(
