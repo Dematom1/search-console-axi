@@ -44,7 +44,8 @@ export async function readUrls(source: { sitemap: string } | { file: string }): 
       ),
     ];
   }
-  const pending = [validateUrl(source.sitemap)];
+  const rootOrigin = new URL(validateUrl(source.sitemap)).origin;
+  const pending = [source.sitemap];
   const visited = new Set<string>();
   const urls = new Set<string>();
   let entryCount = 0;
@@ -101,8 +102,10 @@ export async function readUrls(source: { sitemap: string } | { file: string }): 
       const loc = object(entry).loc;
       if (typeof loc !== "string" || !loc.trim()) usage("Every sitemap entry requires a loc URL.");
       const url = validateUrl(loc.trim());
-      if (index) pending.push(url);
-      else urls.add(url);
+      if (index) {
+        if (new URL(url).origin !== rootOrigin) usage("Child sitemaps must share the root sitemap origin.");
+        pending.push(url);
+      } else urls.add(url);
     }
   }
   return [...urls];

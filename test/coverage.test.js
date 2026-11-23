@@ -289,6 +289,7 @@ test("sitemap index expands children, XML entities and namespaces, deduplicates 
       "/oversized": "oversized",
       "/entry-limit": `<urlset>${"<url><loc>https://example.com/a</loc></url>".repeat(100001)}</urlset>`,
       "/redirect": "redirect",
+      "/cross": `<sitemapindex><sitemap><loc>http://localhost:${server.address().port}/private</loc></sitemap></sitemapindex>`,
     };
     if (req.url === "/redirect") {
       res.writeHead(302, { Location: "http://127.0.0.1/private" }).end();
@@ -309,6 +310,7 @@ test("sitemap index expands children, XML entities and namespaces, deduplicates 
   await assert.rejects(readUrls({ sitemap: base + "/dtd" }), /Invalid sitemap XML/);
   await assert.rejects(readUrls({ sitemap: base + "/oversized" }), /Cannot fetch sitemap/);
   await assert.rejects(readUrls({ sitemap: base + "/redirect" }), /Cannot fetch sitemap/);
+  await assert.rejects(readUrls({ sitemap: base + "/cross" }), /share the root sitemap origin/);
   await assert.rejects(readUrls({ sitemap: base + "/entry-limit" }), /100000 total entries/);
   const file = join(dir, "urls.txt");
   await writeFile(file, "\r\nhttps://example.com/a\r\nhttps://example.com/a\n https://example.com/b \n");

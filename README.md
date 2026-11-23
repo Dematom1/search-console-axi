@@ -67,7 +67,7 @@ search-console-axi coverage - --format json < urls.txt
 search-console-axi coverage urls.txt --format csv > coverage.csv
 ```
 
-File and stdin input contain one absolute HTTP or HTTPS URL per line. Blank lines are ignored and duplicates are inspected once. Sitemap input supports XML sitemap indexes, child sitemaps, and gzip. Index cycles are ignored. A run accepts at most 1,000 sitemap documents, each up to 50 MiB uncompressed, and 100,000 total sitemap entries. HTTP redirects are rejected. DTDs are rejected. Coverage never submits URLs or calls the Indexing API.
+File and stdin input contain one absolute HTTP or HTTPS URL per line. Blank lines are ignored and duplicates are inspected once. Sitemap input supports XML sitemap indexes, child sitemaps, and gzip. Index cycles are ignored. A run accepts at most 1,000 sitemap documents, each up to 50 MiB uncompressed, and 100,000 total sitemap entries. HTTP redirects are rejected, and child sitemaps must share the root sitemap's origin. To use a trusted external sitemap, invoke coverage with that sitemap directly. DTDs are rejected. Coverage never submits URLs or calls the Indexing API.
 
 TOON output groups counts and URL lists by `coverageState`, `verdict`, canonical comparison (`same`, `different`, or `unknown`), and last-crawl age. Crawl buckets are under 7 days, 7–29 days, 30 days or older, and unknown. Missing canonical fields do not imply a mismatch. JSON output includes per-URL rows plus progress and quota metadata. CSV output contains per-URL rows on stdout and TOON progress metadata on stderr. Exports retain the documented field names `coverageState`, `verdict`, `googleCanonical`, `userCanonical`, and `lastCrawlTime`, plus `url` and `inspectedAt`.
 
