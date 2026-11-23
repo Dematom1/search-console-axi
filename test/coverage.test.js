@@ -45,6 +45,7 @@ async function sandbox(t) {
 test("coverage paces under 600/minute, saves results, resumes without repeats and refresh still consumes quota", async (t) => {
   const dir = await sandbox(t);
   let clock = Date.parse("2026-01-02T00:00:00Z");
+  let monotonic = 0;
   const starts = [];
   const waits = [];
   const options = {
@@ -52,9 +53,11 @@ test("coverage paces under 600/minute, saves results, resumes without repeats an
     urls: ["https://example.com/a", "https://example.com/b", "https://example.com/a"],
     state: join(dir, "progress.json"),
     now: () => clock,
+    monotonicNow: () => monotonic,
     sleep: async (ms) => {
       waits.push(ms);
       clock += ms;
+      monotonic += ms;
     },
     inspect: async () => {
       starts.push(clock);
@@ -67,7 +70,7 @@ test("coverage paces under 600/minute, saves results, resumes without repeats an
   assert.equal(first.remaining, 0);
   assert.equal(first.quota.local_attempts_24h, 2);
   assert.ok(starts[1] - starts[0] >= 100);
-  assert.equal(waits.length, 2);
+  assert.equal(waits.length, 1);
   assert.equal((await collectCoverage(options)).inspected, 0);
   assert.equal(starts.length, 2);
   assert.equal(JSON.parse(await readFile(options.state, "utf8")).rows.length, 2);
@@ -81,6 +84,7 @@ test("coverage paces under 600/minute, saves results, resumes without repeats an
 test("quota pacing rechecks after an early timer wake", async (t) => {
   const dir = await sandbox(t);
   let clock = Date.parse("2026-01-02T00:00:00Z");
+  let monotonic = 0;
   let earlyWake = true;
   const starts = [];
   await collectCoverage({
@@ -88,8 +92,11 @@ test("quota pacing rechecks after an early timer wake", async (t) => {
     urls: ["https://example.com/a", "https://example.com/b"],
     state: join(dir, "progress.json"),
     now: () => clock,
+    monotonicNow: () => monotonic,
     sleep: async (ms) => {
-      clock += earlyWake ? ((earlyWake = false), Math.floor(ms / 2)) : ms;
+      const elapsed = earlyWake ? ((earlyWake = false), Math.floor(ms / 2)) : ms;
+      clock += elapsed;
+      monotonic += elapsed;
     },
     inspect: async () => {
       starts.push(clock);
@@ -102,6 +109,7 @@ test("quota pacing rechecks after an early timer wake", async (t) => {
 test("future quota timestamps are clamped and wall-clock rollback does not stall pacing", async (t) => {
   const dir = await sandbox(t);
   let clock = Date.parse("2026-01-02T00:00:00Z");
+  let monotonic = 0;
   const paths = coveragePaths("sc-domain:example.com", join(dir, "future.json"));
   await mkdir(dirname(paths.ledger), { recursive: true });
   await writeFile(paths.ledger, JSON.stringify({ attempts: [clock + 86_400_000], blockedUntil: 0 }));
@@ -111,9 +119,11 @@ test("future quota timestamps are clamped and wall-clock rollback does not stall
     urls: ["https://example.com/future"],
     state: paths.state,
     now: () => clock,
+    monotonicNow: () => monotonic,
     sleep: async (ms) => {
       waits.push(ms);
       clock += ms;
+      monotonic += ms;
     },
     inspect: async () => indexed,
   });
@@ -121,15 +131,18 @@ test("future quota timestamps are clamped and wall-clock rollback does not stall
   assert.ok(waits.every((ms) => ms <= 110));
 
   clock = Date.parse("2026-01-02T00:00:00Z");
+  monotonic = 0;
   let sleeps = 0;
   const rolledBack = await collectCoverage({
     site: "sc-domain:example.com",
     urls: ["https://example.com/a", "https://example.com/b"],
     state: join(dir, "rollback.json"),
     now: () => clock,
+    monotonicNow: () => monotonic,
     sleep: async (ms) => {
       if (++sleeps > 2) throw new Error("pacing stalled after wall-clock rollback");
       clock += ms;
+      monotonic += ms;
     },
     inspect: async () => {
       clock -= 60_000;
@@ -143,6 +156,7 @@ test("future quota timestamps are clamped and wall-clock rollback does not stall
 test("documented 2000/day local ceiling stops cleanly and continues across days", async (t) => {
   const dir = await sandbox(t);
   let clock = Date.parse("2026-01-02T00:00:00Z");
+  let monotonic = 0;
   const paths = coveragePaths("sc-domain:example.com", join(dir, "progress.json"));
   await mkdir(dirname(paths.ledger), { recursive: true });
   await writeFile(paths.ledger, JSON.stringify({ attempts: Array(2000).fill(clock - 1000), blockedUntil: 0 }));
@@ -152,8 +166,10 @@ test("documented 2000/day local ceiling stops cleanly and continues across days"
     urls: ["https://example.com/a"],
     state: paths.state,
     now: () => clock,
+    monotonicNow: () => monotonic,
     sleep: async (ms) => {
       clock += ms;
+      monotonic += ms;
     },
     inspect: async () => {
       calls++;
@@ -175,14 +191,17 @@ test("documented 2000/day local ceiling stops cleanly and continues across days"
 test("quota responses preserve finished URLs and reserve failed attempts; no automatic retries", async (t) => {
   const dir = await sandbox(t);
   let clock = Date.parse("2026-01-02T00:00:00Z");
+  let monotonic = 0;
   let calls = 0;
   const options = {
     site: "sc-domain:example.com",
     urls: ["https://example.com/a", "https://example.com/b", "https://example.com/c"],
     state: join(dir, "progress.json"),
     now: () => clock,
+    monotonicNow: () => monotonic,
     sleep: async (ms) => {
       clock += ms;
+      monotonic += ms;
     },
     inspect: async () => {
       if (++calls === 2) throw { response: { status: 429 } };
@@ -266,9 +285,10 @@ test("SIGINT saves the completed URL, releases locks and resumes on rerun", asyn
   assert.equal((await collectCoverage({ ...options, inspect: async () => indexed })).inspected, 1);
 });
 
-test("group counts, omitted canonicals/crawl times and JSON/CSV rows follow documented fields", async (t) => {
+test("group counts, Google canonicals and JSON/CSV rows follow documented fields", async (t) => {
   const dir = await sandbox(t);
   let time = Date.parse("2026-01-02T00:00:00Z");
+  let monotonic = 0;
   let call = 0;
   const result = await collectCoverage({
     site: "sc-domain:example.com",
@@ -278,11 +298,14 @@ test("group counts, omitted canonicals/crawl times and JSON/CSV rows follow docu
       "https://example.com/c",
       "https://example.com/d",
       "https://example.com/e",
+      "https://example.com/f",
     ],
     state: join(dir, "progress.json"),
     now: () => time,
+    monotonicNow: () => monotonic,
     sleep: async (ms) => {
       time += ms;
+      monotonic += ms;
     },
     inspect: async () =>
       [
@@ -297,17 +320,31 @@ test("group counts, omitted canonicals/crawl times and JSON/CSV rows follow docu
           },
         },
         { indexStatusResult: {} },
+        {
+          indexStatusResult: {
+            ...indexed.indexStatusResult,
+            googleCanonical: "https://example.com/another-canonical",
+            lastCrawlTime: "2025-12-15T00:00:00Z",
+          },
+        },
       ][call++],
   });
   const groups = groupCoverage(result.rows, time);
   assert.deepEqual(
-    groups.map(({ count, canonical, last_crawl }) => ({ count, canonical, last_crawl })),
+    groups.map(({ count, canonical, canonical_match, last_crawl }) => ({ count, canonical, canonical_match, last_crawl })),
     [
-      { count: 2, canonical: "same", last_crawl: "under_7d" },
-      { count: 1, canonical: "unknown", last_crawl: "30d_or_older" },
-      { count: 1, canonical: "different", last_crawl: "7_to_29d" },
-      { count: 1, canonical: "unknown", last_crawl: "unknown" },
+      { count: 2, canonical: "https://example.com/canonical", canonical_match: "same", last_crawl: "under_7d" },
+      { count: 1, canonical: "unknown", canonical_match: "unknown", last_crawl: "30d_or_older" },
+      { count: 1, canonical: "https://example.com/other", canonical_match: "different", last_crawl: "7_to_29d" },
+      { count: 1, canonical: "unknown", canonical_match: "unknown", last_crawl: "unknown" },
+      {
+        count: 1,
+        canonical: "https://example.com/another-canonical",
+        canonical_match: "different",
+        last_crawl: "7_to_29d",
+      },
     ],
+
   );
   assert.deepEqual(groups[0].urls, ["https://example.com/a", "https://example.com/b"]);
   assert.equal(JSON.parse(JSON.stringify(result)).rows[2].googleCanonical, "");

@@ -134,9 +134,11 @@ export async function collectCoverage(options: {
   refresh?: boolean;
   inspect: (url: string) => Promise<unknown>;
   now?: () => number;
+  monotonicNow?: () => number;
   sleep?: (ms: number) => Promise<unknown>;
 }) {
   const now = options.now ?? Date.now;
+  const monotonicNow = options.monotonicNow ?? (() => performance.now());
   const sleep = options.sleep ?? setTimeout;
   const paths = coveragePaths(options.site, options.state);
   if (paths.state === paths.ledger || paths.state === `${paths.ledger}.lock`)
@@ -180,11 +182,11 @@ export async function collectCoverage(options: {
       const delay =
         lastRequestAt === undefined
           ? Math.max(0, latest + INTERVAL_MS - now())
-          : Math.max(0, INTERVAL_MS - (performance.now() - lastRequestAt));
-      const waitingSince = performance.now();
-      while (performance.now() - waitingSince < delay)
-        await sleep(delay - (performance.now() - waitingSince));
-      lastRequestAt = performance.now();
+          : Math.max(0, INTERVAL_MS - (monotonicNow() - lastRequestAt));
+      const waitingSince = monotonicNow();
+      while (monotonicNow() - waitingSince < delay)
+        await sleep(delay - (monotonicNow() - waitingSince));
+      lastRequestAt = monotonicNow();
       // Reserve quota before sending: interruptions and failed calls must not refund an attempt.
       ledger.attempts.push(now());
       await save(paths.ledger, ledger);
@@ -251,14 +253,23 @@ export async function collectCoverage(options: {
 export function groupCoverage(rows: Row[], now = Date.now()) {
   const groups = new Map<
     string,
-    { coverage_state: string; verdict: string; canonical: string; last_crawl: string; count: number; urls: string[] }
+    {
+      coverage_state: string;
+      verdict: string;
+      canonical: string;
+      canonical_match: string;
+      last_crawl: string;
+      count: number;
+      urls: string[];
+    }
   >();
   for (const row of rows) {
     const age = now - Date.parse(row.lastCrawlTime);
     const values = {
       coverage_state: row.coverageState || "unknown",
       verdict: row.verdict || "unknown",
-      canonical:
+      canonical: row.googleCanonical || "unknown",
+      canonical_match:
         !row.googleCanonical || !row.userCanonical
           ? "unknown"
           : row.googleCanonical === row.userCanonical
