@@ -184,8 +184,7 @@ export async function collectCoverage(options: {
           ? Math.max(0, latest + INTERVAL_MS - now())
           : Math.max(0, INTERVAL_MS - (monotonicNow() - lastRequestAt));
       const waitingSince = monotonicNow();
-      while (monotonicNow() - waitingSince < delay)
-        await sleep(delay - (monotonicNow() - waitingSince));
+      while (monotonicNow() - waitingSince < delay) await sleep(delay - (monotonicNow() - waitingSince));
       lastRequestAt = monotonicNow();
       // Reserve quota before sending: interruptions and failed calls must not refund an attempt.
       ledger.attempts.push(now());

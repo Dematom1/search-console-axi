@@ -78,7 +78,10 @@ export async function readUrls(source: { sitemap: string } | { file: string }): 
         }
         chunks.push(value);
       }
-      const bytes = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), size);
+      const bytes = Buffer.concat(
+        chunks.map((chunk) => Buffer.from(chunk)),
+        size,
+      );
       xml = (
         bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes, { maxOutputLength: 52_428_800 }) : bytes
       ).toString("utf8");
@@ -87,7 +90,9 @@ export async function readUrls(source: { sitemap: string } | { file: string }): 
     }
     if (/<!DOCTYPE|<!ENTITY/i.test(xml) || XMLValidator.validate(xml) !== true)
       usage("Invalid sitemap XML (DTDs are not supported).");
-    for (const match of xml.matchAll(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<(?:[\w.-]+:)?(?:url|sitemap)(?=[\s/>])/g)) {
+    for (const match of xml.matchAll(
+      /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<(?:[\w.-]+:)?(?:url|sitemap)(?=[\s/>])/g,
+    )) {
       if (match[0].startsWith("<") && !match[0].startsWith("<!--") && !match[0].startsWith("<![CDATA[")) {
         if (++entryCount > MAX_SITEMAP_ENTRIES) usage("Sitemap exceeds 100000 total entries.");
       }

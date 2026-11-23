@@ -331,7 +331,12 @@ test("group counts, Google canonicals and JSON/CSV rows follow documented fields
   });
   const groups = groupCoverage(result.rows, time);
   assert.deepEqual(
-    groups.map(({ count, canonical, canonical_match, last_crawl }) => ({ count, canonical, canonical_match, last_crawl })),
+    groups.map(({ count, canonical, canonical_match, last_crawl }) => ({
+      count,
+      canonical,
+      canonical_match,
+      last_crawl,
+    })),
     [
       { count: 2, canonical: "https://example.com/canonical", canonical_match: "same", last_crawl: "under_7d" },
       { count: 1, canonical: "unknown", canonical_match: "unknown", last_crawl: "30d_or_older" },
@@ -344,7 +349,6 @@ test("group counts, Google canonicals and JSON/CSV rows follow documented fields
         last_crawl: "7_to_29d",
       },
     ],
-
   );
   assert.deepEqual(groups[0].urls, ["https://example.com/a", "https://example.com/b"]);
   assert.equal(JSON.parse(JSON.stringify(result)).rows[2].googleCanonical, "");
